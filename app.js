@@ -5,7 +5,13 @@ function load(key, fallback){
 }
 function save(key, value){ localStorage.setItem(key, JSON.stringify(value)); }
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
-function todayStr(d){ d = d || new Date(); return d.toISOString().slice(0,10); }
+function todayStr(d){
+  d = d || new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const day = String(d.getDate()).padStart(2,'0');
+  return y+'-'+m+'-'+day;
+}
 function fmtDateLabel(dateStr){
   const d = new Date(dateStr+'T00:00:00');
   const days=['Sekmadienis','Pirmadienis','Antradienis','Trečiadienis','Ketvirtadienis','Penktadienis','Šeštadienis'];
@@ -71,12 +77,14 @@ const EQUIPMENT = [
   {id:'airfryer', label:'Oro gruzdintuvė', icon:'🍟'},
   {id:'blenderis', label:'Blenderis', icon:'🥤'},
   {id:'skrudintuvas', label:'Skrudintuvas', icon:'🍞'},
-  {id:'multivarke', label:'Multivarkė', icon:'🍲'},
+  {id:'multivarke', label:'Multivarkė (lėtpuodis)', icon:'🍲'},
   {id:'grilis', label:'Grilis', icon:'🍗'},
   {id:'wok', label:'Wok / gili keptuvė', icon:'🥘'}
 ];
 const BAR_TOOLS = [
-  {id:'baro_irankiai', label:'Šeikeris, grūstuvas, koštuvas', icon:'🍸'}
+  {id:'seikeris', label:'Šeikeris (kokteilių plaktuvė)', icon:'🍸'},
+  {id:'grustuve', label:'Grūstuvė (muddler)', icon:'🥄'},
+  {id:'kostuvas', label:'Koštuvas', icon:'🧉'}
 ];
 const CATEGORY_LABELS = {pusryciai:'Pusryčiai', pietus:'Pietūs', vakariene:'Vakarienė', uzkandis:'Užkandis', desertas:'Desertas', kokteiliai:'Kokteiliai'};
 const CUISINE_LABELS = {tradicinis:'Tradicinis', grill:'Grill', keptuveje:'Keptuvėje', kinietiska:'Kinų virtuvė', itale:'Itališka', meksikietiska:'Meksikietiška', sriuba:'Sriubos', desertas:'Saldumynai', indiska:'Indiška', rytu:'Rytų virtuvė'};
@@ -89,11 +97,91 @@ function computeDifficulty(r){
 }
 const SPIRIT_LABELS = {romas:'Romas', degtine:'Degtinė', dzinas:'Džinas', viskis:'Viskis', tequila:'Tequila', konjakas:'Konjakas', kita:'Kita/mišrus'};
 const SWEETNESS_LABELS = {saldus:'Saldus', vidutinis:'Vidutinis', sausas:'Sausas'};
-const PANTRY_CATEGORIES = ['Daržovės','Vaisiai','Mėsa ir žuvis','Pieno produktai','Kiaušiniai','Grūdai ir makaronai','Ankštiniai','Sultys','Prieskoniai ir padažai','Kepimo produktai','Alkoholiniai gėrimai','Kita'];
+const PANTRY_CATEGORIES = ['Daržovės','Vaisiai','Mėsa ir žuvis','Pieno produktai','Kiaušiniai','Grūdai, kruopos ir makaronai','Miltai ir dribsniai','Duona ir kepiniai','Ankštiniai','Konservai','Šaldyti produktai','Prieskoniai ir žolelės','Padažai ir aliejus','Kepimo produktai','Saldumynai ir užkandžiai','Sultys','Gėrimai','Alkoholiniai gėrimai','Kita'];
 const FRESHNESS_CATEGORIES = ['Daržovės','Vaisiai','Mėsa ir žuvis'];
 const FRESHNESS_OPTIONS = ['Šviežia','Konservuota'];
 const LOCATIONS = ['Šaldytuvas','Šaldiklis','Spinta'];
 const UNITS = ['g','kg','ml','l','vnt','šauk.','žiupsnelis'];
+
+/* ===================== DEFAULT UNITS & SHELF LIFE ===================== */
+// Standard unit per product keyword (so entering is faster and consistent)
+const DEFAULT_UNIT_BY_KEYWORD = [
+  ['pienas','l'],['grietinėl','ml'],['grietin','g'],['kefyr','l'],['jogurt','g'],['varškė','g'],['sūris','g'],['sviest','g'],
+  ['kiaušin','vnt'],['mėsa','kg'],['jautien','kg'],['kiaulien','kg'],['vištien','kg'],['kalakut','kg'],['žuv','kg'],['lašiš','kg'],['krevet','g'],['kumpis','g'],['dešr','g'],['bekon','g'],
+  ['bulv','kg'],['morka','kg'],['svogūn','kg'],['pomidor','kg'],['agurk','kg'],['paprika','vnt'],['cukinij','vnt'],['kopūst','vnt'],['brokoli','vnt'],['česnak','vnt'],['moliūg','kg'],['salot','g'],
+  ['banan','vnt'],['obuoli','kg'],['citrin','vnt'],['apelsin','vnt'],['avokad','vnt'],['uog','g'],['vaisi','kg'],
+  ['miltai','kg'],['dribsni','g'],['ryžiai','kg'],['grikiai','kg'],['makaron','g'],['bulgur','g'],['manų','g'],['kruop','g'],
+  ['duon','vnt'],['cukr','kg'],['druska','g'],['aliej','l'],['padaž','ml'],['medus','g'],['kakav','g'],['šokolad','g'],
+  ['lęšiai','g'],['pupel','g'],['avinžirni','g'],['žirniai','g'],['sultys','l'],['vanduo','l'],['kava','g'],['arbat','g'],
+  ['alus','l'],['vynas','l'],['degtin','l'],['romas','l'],['viskis','l'],['džinas','l'],['tequila','l'],['konjak','l'],
+];
+function defaultUnitFor(name){
+  const n = normName(name);
+  for(const [key,u] of DEFAULT_UNIT_BY_KEYWORD){ if(keyIncludes(n, key)) return u; }
+  return 'vnt';
+}
+// Shelf life in days, by [keyword, {Šaldytuvas, Šaldiklis, Spinta}]
+const SHELF_LIFE = [
+  ['pienas', {'Šaldytuvas':7, 'Šaldiklis':90, 'Spinta':1}],
+  ['grietin', {'Šaldytuvas':14, 'Šaldiklis':60, 'Spinta':1}],
+  ['jogurt', {'Šaldytuvas':14, 'Šaldiklis':60, 'Spinta':1}],
+  ['kefyr', {'Šaldytuvas':10, 'Šaldiklis':60, 'Spinta':1}],
+  ['varškė', {'Šaldytuvas':7, 'Šaldiklis':60, 'Spinta':1}],
+  ['sūris', {'Šaldytuvas':21, 'Šaldiklis':120, 'Spinta':2}],
+  ['sviest', {'Šaldytuvas':30, 'Šaldiklis':180, 'Spinta':3}],
+  ['kiaušin', {'Šaldytuvas':28, 'Šaldiklis':0, 'Spinta':7}],
+  ['malta', {'Šaldytuvas':2, 'Šaldiklis':90, 'Spinta':0}],
+  ['vištien', {'Šaldytuvas':2, 'Šaldiklis':270, 'Spinta':0}],
+  ['žuv', {'Šaldytuvas':2, 'Šaldiklis':180, 'Spinta':0}],
+  ['lašiš', {'Šaldytuvas':2, 'Šaldiklis':180, 'Spinta':0}],
+  ['krevet', {'Šaldytuvas':2, 'Šaldiklis':180, 'Spinta':0}],
+  ['mėsa', {'Šaldytuvas':3, 'Šaldiklis':180, 'Spinta':0}],
+  ['jautien', {'Šaldytuvas':4, 'Šaldiklis':270, 'Spinta':0}],
+  ['kiaulien', {'Šaldytuvas':3, 'Šaldiklis':180, 'Spinta':0}],
+  ['kumpis', {'Šaldytuvas':7, 'Šaldiklis':60, 'Spinta':0}],
+  ['dešr', {'Šaldytuvas':7, 'Šaldiklis':60, 'Spinta':0}],
+  ['bekon', {'Šaldytuvas':7, 'Šaldiklis':90, 'Spinta':0}],
+  ['salot', {'Šaldytuvas':5, 'Šaldiklis':0, 'Spinta':1}],
+  ['pomidor', {'Šaldytuvas':7, 'Šaldiklis':0, 'Spinta':4}],
+  ['agurk', {'Šaldytuvas':7, 'Šaldiklis':0, 'Spinta':3}],
+  ['paprika', {'Šaldytuvas':10, 'Šaldiklis':180, 'Spinta':4}],
+  ['morka', {'Šaldytuvas':21, 'Šaldiklis':180, 'Spinta':7}],
+  ['bulv', {'Šaldytuvas':30, 'Šaldiklis':0, 'Spinta':30}],
+  ['svogūn', {'Šaldytuvas':30, 'Šaldiklis':0, 'Spinta':30}],
+  ['česnak', {'Šaldytuvas':60, 'Šaldiklis':0, 'Spinta':60}],
+  ['kopūst', {'Šaldytuvas':21, 'Šaldiklis':0, 'Spinta':7}],
+  ['moliūg', {'Šaldytuvas':30, 'Šaldiklis':0, 'Spinta':30}],
+  ['banan', {'Šaldytuvas':7, 'Šaldiklis':60, 'Spinta':5}],
+  ['obuoli', {'Šaldytuvas':30, 'Šaldiklis':0, 'Spinta':10}],
+  ['citrin', {'Šaldytuvas':21, 'Šaldiklis':0, 'Spinta':10}],
+  ['apelsin', {'Šaldytuvas':21, 'Šaldiklis':0, 'Spinta':10}],
+  ['avokad', {'Šaldytuvas':7, 'Šaldiklis':0, 'Spinta':4}],
+  ['uog', {'Šaldytuvas':5, 'Šaldiklis':180, 'Spinta':1}],
+  ['duon', {'Šaldytuvas':7, 'Šaldiklis':60, 'Spinta':4}],
+  ['miltai', {'Šaldytuvas':0, 'Šaldiklis':365, 'Spinta':240}],
+  ['dribsni', {'Šaldytuvas':0, 'Šaldiklis':0, 'Spinta':300}],
+  ['ryžiai', {'Šaldytuvas':0, 'Šaldiklis':0, 'Spinta':720}],
+  ['grikiai', {'Šaldytuvas':0, 'Šaldiklis':0, 'Spinta':365}],
+  ['makaron', {'Šaldytuvas':0, 'Šaldiklis':0, 'Spinta':720}],
+  ['cukr', {'Šaldytuvas':0, 'Šaldiklis':0, 'Spinta':1000}],
+  ['druska', {'Šaldytuvas':0, 'Šaldiklis':0, 'Spinta':1000}],
+  ['aliej', {'Šaldytuvas':0, 'Šaldiklis':0, 'Spinta':365}],
+  ['medus', {'Šaldytuvas':0, 'Šaldiklis':0, 'Spinta':1000}],
+  ['konserv', {'Šaldytuvas':0, 'Šaldiklis':0, 'Spinta':730}],
+  ['sultys', {'Šaldytuvas':7, 'Šaldiklis':0, 'Spinta':180}],
+];
+function shelfLifeDays(name, location){
+  if(!location) return null;
+  const n = normName(name);
+  for(const [key, map] of SHELF_LIFE){ if(keyIncludes(n, key)){ const d = map[location]; return d && d>0 ? d : null; } }
+  return null;
+}
+function suggestExpiry(name, location){
+  const days = shelfLifeDays(name, location);
+  if(!days) return null;
+  const d = new Date(); d.setDate(d.getDate()+days);
+  return todayStr(d);
+}
 
 /* ===================== DIET / CARNIVORE AUTO-TAGGING ===================== */
 const MEAT_FISH_KEYWORDS = ['vištien','jautien','kiaulien','mėsa','kumpis','lašiš','krevet','žuv','dešra','bekon','antien','kalakut','tuno','tunas'];
@@ -239,7 +327,18 @@ const NUTRITION100 = [
   ['sultinys', [7,0.5,1,0.2]],
   ['spanguoli', [46,0.4,12,0.1]],
   ['garstyč', [66,4.4,5,3.3]],
-  ['cinamon', [247,4,80,1.2]]
+  ['cinamon', [247,4,80,1.2]],
+  ['baklažan', [25,1,6,0.2]],
+  ['žiedini', [25,1.9,5,0.3]],
+  ['batonas', [265,9,49,3.2]],
+  ['petražol', [36,3,6,0.8]],
+  ['sluoksniuota tešla', [551,7,45,38]],
+  ['sezam', [573,17,23,50]],
+  ['imbier', [80,1.8,18,0.8]],
+  ['mocarela', [280,28,3,17]],
+  ['rozmarin', [131,3.3,21,6]],
+  ['džiūvės', [395,13,72,5]],
+  ['žalieji lęšiai', [116,9,20,0.4]]
 ];
 function nutritionFor100g(name){
   const n = normName(name);
@@ -593,14 +692,70 @@ mk('r90','Vištienos šlaunelės su medumi ir garstyčiomis','vakariene',['orkai
   ['Sumaišyk medų, garstyčias ir aliejų.','Aptepk vištienos šlauneles mišiniu.','Kepk orkaitėje 200°C apie 35 min.','Kelis kartus per kepimą apliežk susidariusiu padažu.']),
 mk('r91','Šokoladinis avokado desertas','desertas',['blenderis'],10,2,260,5,26,17,
   [['Avokadas',2,'vnt'],['Kakava',3,'šauk.'],['Medus',2,'šauk.'],['Avižinis pienas',50,'ml']],
-  ['Sudėk visus ingredientus į blenderį.','Plak, kol taps lygus ir kreminis.','Supilk į indelius.','Šaldyk bent 30 min. prieš patiekiant.'],'desertas')
+  ['Sudėk visus ingredientus į blenderį.','Plak, kol taps lygus ir kreminis.','Supilk į indelius.','Šaldyk bent 30 min. prieš patiekiant.'],'desertas'),
+
+/* ---- NAUJI RECEPTAI (3 atnaujinimas) ---- */
+mk('r92','Vištienos ir daržovių troškinys','vakariene',['virykle'],40,4,420,34,28,18,
+  [['Vištienos filė',500,'g'],['Bulvės',400,'g'],['Morka',2,'vnt'],['Svogūnas',1,'vnt']],
+  ['Supjaustyk vištieną ir daržoves.','Apkepink vištieną puode.','Sudėk daržoves ir įpilk vandens.','Troškink ant mažos ugnies 25 min.'],'tradicinis'),
+mk('r93','Kreminė grybų sriuba','pietus',['virykle','blenderis'],30,4,220,6,18,14,
+  [['Pievagrybiai',400,'g'],['Svogūnas',1,'vnt'],['Grietinėlė',100,'ml'],['Daržovių sultinys',600,'ml']],
+  ['Pakepink grybus su svogūnu.','Įpilk sultinį, virk 15 min.','Sutrink blenderiu.','Įmaišyk grietinėlę ir pakaitink.'],'sriuba'),
+mk('r94','Keptų daržovių salotos','pietus',['orkaite'],35,3,240,6,26,13,
+  [['Cukinija',1,'vnt'],['Paprika',2,'vnt'],['Baklažanas',1,'vnt'],['Alyvuogių aliejus',3,'šauk.']],
+  ['Supjaustyk daržoves gabalėliais.','Apšlakstyk aliejumi, pagardink.','Kepk orkaitėje 200°C apie 25 min.','Patiekk šiltas ar atvėsusias.'],'tradicinis'),
+mk('r95','Jautienos guliašas','vakariene',['virykle'],80,4,480,38,24,26,
+  [['Jautiena',600,'g'],['Svogūnas',2,'vnt'],['Paprika',1,'vnt'],['Pomidorų pasta',2,'šauk.']],
+  ['Supjaustyk jautieną kubeliais, apkepink.','Sudėk svogūną ir papriką.','Įmaišyk pomidorų pastą ir vandenį.','Troškink ant mažos ugnies 1 val.'],'tradicinis'),
+mk('r96','Ispaniškas omletas (tortilja)','pusryciai',['virykle'],30,4,320,14,26,18,
+  [['Bulvės',400,'g'],['Kiaušiniai',6,'vnt'],['Svogūnas',1,'vnt'],['Alyvuogių aliejus',3,'šauk.']],
+  ['Supjaustyk bulves plonais griežinėliais, apkepink su svogūnu.','Išplak kiaušinius, sumaišyk su bulvėmis.','Kepk keptuvėje ant mažos ugnies.','Apversk ir kepk kitą pusę.'],'tradicinis'),
+mk('r97','Vištiena su citrina ir česnaku','vakariene',['virykle'],30,2,400,42,6,22,
+  [['Vištienos filė',400,'g'],['Citrina',1,'vnt'],['Česnakas',3,'vnt'],['Alyvuogių aliejus',2,'šauk.']],
+  ['Apkepink vištieną keptuvėje.','Sudėk smulkintą česnaką.','Užspausk citrinos sulčių.','Troškink 5 min. ir patiekk.'],'keptuveje'),
+mk('r98','Daržovių karis','vakariene',['virykle'],35,4,360,10,48,15,
+  [['Bulvės',300,'g'],['Žiediniai kopūstai',300,'g'],['Kokosų pienas',200,'ml'],['Curry pasta',2,'šauk.']],
+  ['Pakepink curry pastą.','Sudėk supjaustytas daržoves.','Įpilk kokosų pieną ir vandenį.','Troškink 20 min., patiekk su ryžiais.'],'indiska'),
+mk('r99','Kepta duona su česnaku','uzkandis',['orkaite'],15,4,220,6,32,8,
+  [['Batonas',1,'vnt'],['Sviestas',50,'g'],['Česnakas',3,'vnt'],['Petražolės',1,'šauk.']],
+  ['Sumaišyk minkštą sviestą su smulkintu česnaku ir petražolėmis.','Supjaustyk batoną riekelėmis.','Užtepk česnakiniu sviestu.','Kepk orkaitėje 180°C apie 10 min.'],'itale'),
+mk('r100','Vištienos sriuba su makaronais','pietus',['virykle'],40,4,300,24,28,9,
+  [['Vištienos filė',300,'g'],['Makaronai',150,'g'],['Morka',2,'vnt'],['Svogūnas',1,'vnt']],
+  ['Išvirk vištieną sultinyje, išimk ir susmulkink.','Į sultinį sudėk daržoves, virk 10 min.','Suber makaronus, virk dar 8 min.','Grąžink vištieną ir patiekk.'],'sriuba'),
+mk('r101','Bulvių plokštainis (kugelis)','vakariene',['orkaite'],75,6,340,10,40,16,
+  [['Bulvės',1500,'g'],['Bekonas',150,'g'],['Svogūnas',1,'vnt'],['Kiaušiniai',2,'vnt']],
+  ['Sutarkuok bulves ir nuspausk skystį.','Apkepink bekoną su svogūnu.','Sumaišyk viską su kiaušiniais.','Kepk orkaitėje 180°C apie 1 val.'],'tradicinis'),
+mk('r102','Feta ir špinatų kepiniai','uzkandis',['orkaite'],35,4,320,12,26,19,
+  [['Sluoksniuota tešla',250,'g'],['Fetos sūris',150,'g'],['Špinatai',150,'g'],['Kiaušiniai',1,'vnt']],
+  ['Apkepink špinatus, atvėsink.','Sumaišyk su fetos sūriu.','Įdėk įdarą į tešlos gabalėlius.','Aptepk kiaušiniu ir kepk 200°C apie 20 min.'],'itale'),
+mk('r103','Lęšių ir daržovių sriuba','pietus',['virykle'],35,4,260,14,40,5,
+  [['Žalieji lęšiai',200,'g'],['Morka',2,'vnt'],['Salieras',1,'vnt'],['Pomidorų padažas',200,'g']],
+  ['Susmulkink daržoves.','Sudėk viską į puodą su vandeniu.','Virk 25 min., kol lęšiai suminkštės.','Pagardink prieskoniais.'],'sriuba'),
+mk('r104','Keptas kiaušinis ant skrebučio','pusryciai',['virykle'],10,1,300,14,28,15,
+  [['Duonos riekelė',2,'vnt'],['Kiaušiniai',2,'vnt'],['Sviestas',10,'g'],['Sūris',30,'g']],
+  ['Paskrudink duoną.','Iškepk kiaušinius keptuvėje su sviestu.','Uždėk sūrio ant karštos duonos.','Ant viršaus sudėk kiaušinius.'],'keptuveje'),
+mk('r105','Vištienos kepsneliai su sezamu','vakariene',['orkaite'],30,3,420,38,12,24,
+  [['Vištienos filė',500,'g'],['Sezamų sėklos',3,'šauk.'],['Sojos padažas',2,'šauk.'],['Medus',1,'šauk.']],
+  ['Supjaustyk vištieną juostelėmis.','Apvoliok sojos padaže su medumi.','Apibarstyk sezamų sėklomis.','Kepk orkaitėje 200°C apie 20 min.'],'kinietiska'),
+mk('r106','Morkų ir imbiero sriuba','pietus',['virykle','blenderis'],30,4,180,3,26,7,
+  [['Morka',600,'g'],['Svogūnas',1,'vnt'],['Imbieras',20,'g'],['Daržovių sultinys',700,'ml']],
+  ['Pakepink svogūną ir imbierą.','Sudėk morkas ir sultinį.','Virk 20 min.','Sutrink blenderiu iki vientisos masės.'],'sriuba'),
+mk('r107','Mocarelos ir pomidorų salotos','uzkandis',[],10,2,280,14,8,22,
+  [['Mocarela',150,'g'],['Pomidorai',3,'vnt'],['Bazilikas',1,'šauk.'],['Alyvuogių aliejus',2,'šauk.']],
+  ['Supjaustyk mocarelą ir pomidorus griežinėliais.','Sudėk pakaitomis lėkštėje.','Apibarstyk baziliku.','Apšlakstyk aliejumi.'],'itale'),
+mk('r108','Keptos bulvės su rozmarinu','uzkandis',['orkaite'],40,4,220,4,36,7,
+  [['Bulvės',700,'g'],['Alyvuogių aliejus',3,'šauk.'],['Rozmarinas',1,'šauk.'],['Česnakas',3,'vnt']],
+  ['Supjaustyk bulves skiltelėmis.','Apšlakstyk aliejumi, apibarstyk rozmarinu ir česnaku.','Kepk orkaitėje 200°C apie 30 min.','Kelis kartus apversk.'],'tradicinis'),
+mk('r109','Kiaulienos karbonadas','vakariene',['virykle'],25,2,520,40,12,34,
+  [['Kiaulienos kepsnys',400,'g'],['Kiaušiniai',1,'vnt'],['Džiūvėsiai',60,'g'],['Aliejus',3,'šauk.']],
+  ['Išplak kiaulienos kepsnius plonai.','Pavoliok kiaušinyje, tada džiūvėsiuose.','Kepk keptuvėje su aliejumi iš abiejų pusių.','Patiekk su bulvėmis ar salotomis.'],'keptuveje')
 ];
 applyComputedNutrition(BUILTIN_RECIPES);
 BUILTIN_RECIPES.forEach(r=>{ r.difficulty = computeDifficulty(r); });
 
 /* ===================== COCKTAILS ===================== */
 const COCKTAILS = [
-mk('k01','Mojito','kokteiliai',['baro_irankiai'],5,1,180,0,18,0,
+mk('k01','Mojito','kokteiliai',['grustuve'],5,1,180,0,18,0,
   [['Baltasis romas',50,'ml'],['Šviežios mėtos',8,'vnt'],['Žalioji laimo',1,'vnt'],['Cukranendrių cukrus',2,'šauk.'],['Sodos vanduo',100,'ml']],
   ['Stiklinėje sugrūsk mėtas su cukrumi ir laimo sultimis.','Įdėk ledo.','Įpilk romą, gerai išmaišyk.','Užpilk sodos vandeniu ir papuošk mėtos šakele.']),
 mk('k02','Kuba Libre','kokteiliai',[],3,1,170,0,20,0,
@@ -615,16 +770,16 @@ mk('k04','Džino tonikas','kokteiliai',[],3,1,150,0,13,0,
 mk('k05','Aperol Spritz','kokteiliai',[],5,1,140,0,15,0,
   [['Aperol',60,'ml'],['Putojantis vynas',90,'ml'],['Sodos vanduo',30,'ml'],['Apelsinas',1,'vnt']],
   ['Į taurę su ledu įpilk Aperol.','Užpilk putojančiu vynu.','Papildyk sodos vandeniu.','Papuošk apelsino skiltele.']),
-mk('k06','Margarita','kokteiliai',['baro_irankiai'],5,1,200,0,18,0,
+mk('k06','Margarita','kokteiliai',['seikeris','kostuvas'],5,1,200,0,18,0,
   [['Tequila',50,'ml'],['Apelsinų likeris',20,'ml'],['Šviežios laimo sultys',25,'ml'],['Druska',1,'žiupsnelis']],
   ['Taurės kraštelį sudrėkink laimu ir apvolyk druskoje.','Sumaišyk tequila, likerį ir laimo sultis su ledu.','Kratyk kokteilių maišytuve (arba stiklinėje) 10 sek.','Perpilk į paruoštą taurę.']),
-mk('k07','Cosmopolitan','kokteiliai',['baro_irankiai'],5,1,170,0,15,0,
+mk('k07','Cosmopolitan','kokteiliai',['seikeris','kostuvas'],5,1,170,0,15,0,
   [['Vodka',40,'ml'],['Apelsinų likeris',15,'ml'],['Spanguolių sultys',30,'ml'],['Šviežios laimo sultys',15,'ml']],
   ['Sudėk visus ingredientus su ledu į maišytuvą.','Gerai išpurtyk.','Perkošk į šaltą taurę.','Papuošk apelsino žievele.']),
 mk('k08','Pina Colada','kokteiliai',['blenderis'],5,1,300,1,32,8,
   [['Baltasis romas',50,'ml'],['Ananasų sultys',90,'ml'],['Kokosų kremas',30,'ml'],['Ledas',150,'g']],
   ['Sudėk visus ingredientus į blenderį.','Plak, kol taps vientisas ir purus.','Supilk į didelę taurę.','Papuošk ananaso gabaliuku.']),
-mk('k09','Whiskey Sour','kokteiliai',['baro_irankiai'],5,1,180,0,14,0,
+mk('k09','Whiskey Sour','kokteiliai',['seikeris','kostuvas'],5,1,180,0,14,0,
   [['Viskis',50,'ml'],['Šviežios citrinos sultys',25,'ml'],['Cukraus sirupas',15,'ml'],['Kiaušinio baltymas',1,'vnt']],
   ['Sudėk visus ingredientus į maišytuvą be ledo, gerai pakratyk (sausas kratymas).','Įdėk ledo ir pakratyk dar kartą.','Perkošk į taurę su ledu.','Papuošk citrinos žievele.']),
 mk('k10','Long Island Iced Tea','kokteiliai',[],5,1,250,0,22,0,
@@ -639,19 +794,19 @@ mk('k12','Kruvinoji Marija','kokteiliai',[],5,1,150,1,12,0,
 mk('k13','Negroni','kokteiliai',[],5,1,170,0,10,0,
   [['Džinas',30,'ml'],['Campari',30,'ml'],['Raudonasis vermutas',30,'ml'],['Apelsino žievelė',1,'vnt']],
   ['Sudėk visus ingredientus į taurę su ledu.','Švelniai išmaišyk apie 20 sek.','Papuošk apelsino žievele.','Patiekk atšaldytą.']),
-mk('k14','Daiquiri','kokteiliai',['baro_irankiai'],5,1,180,0,16,0,
+mk('k14','Daiquiri','kokteiliai',['seikeris','kostuvas'],5,1,180,0,16,0,
   [['Baltasis romas',50,'ml'],['Šviežios laimo sultys',25,'ml'],['Cukraus sirupas',15,'ml']],
   ['Sudėk visus ingredientus su ledu į maišytuvą.','Gerai pakratyk.','Perkošk į šaltą taurę.','Papuošk laimo griežinėliu.']),
 mk('k15','Moscow Mule','kokteiliai',[],3,1,160,0,18,0,
   [['Vodka',50,'ml'],['Imbierinis alus',120,'ml'],['Laimo sultys',10,'ml']],
   ['Į taurę su ledu įpilk vodką ir laimo sultis.','Užpilk imbieriniu alumi.','Švelniai išmaišyk.','Papuošk mėtos šakele.']),
-mk('k16','Caipirinha','kokteiliai',['baro_irankiai'],5,1,190,0,17,0,
+mk('k16','Caipirinha','kokteiliai',['grustuve'],5,1,190,0,17,0,
   [['Cachaça',50,'ml'],['Žalioji laimo',1,'vnt'],['Cukranendrių cukrus',2,'šauk.']],
   ['Supjaustyk laimą griežinėliais ir sudėk į taurę.','Sugrūsk su cukrumi.','Įdėk ledo ir įpilk cachaça.','Gerai išmaišyk ir patiekk.']),
-mk('k17','Mai Tai','kokteiliai',['baro_irankiai'],5,1,230,0,20,0,
+mk('k17','Mai Tai','kokteiliai',['seikeris','kostuvas'],5,1,230,0,20,0,
   [['Tamsusis romas',30,'ml'],['Baltasis romas',30,'ml'],['Apelsinų likeris',15,'ml'],['Laimo sultys',20,'ml']],
   ['Sudėk visus ingredientus su ledu į maišytuvą.','Gerai pakratyk.','Perpilk į taurę su ledu.','Papuošk mėtos šakele ir laimo griežinėliu.']),
-mk('k18','Espresso Martini','kokteiliai',['baro_irankiai'],5,1,210,1,20,0,
+mk('k18','Espresso Martini','kokteiliai',['seikeris','kostuvas'],5,1,210,1,20,0,
   [['Vodka',40,'ml'],['Kavos likeris',30,'ml'],['Šviežias espreso',30,'ml'],['Cukraus sirupas',10,'ml']],
   ['Sudėk visus ingredientus su ledu į maišytuvą.','Gerai pakratyk, kol susidarys putos.','Perkošk į šaltą taurę.','Papuošk keliais kavos pupelėmis.']),
 mk('k19','Paloma','kokteiliai',[],5,1,180,0,19,0,
@@ -660,13 +815,13 @@ mk('k19','Paloma','kokteiliai',[],5,1,180,0,19,0,
 mk('k20','Dark n Stormy','kokteiliai',[],3,1,190,0,22,0,
   [['Tamsusis romas',50,'ml'],['Imbierinis alus',120,'ml'],['Laimo sultys',10,'ml']],
   ['Į taurę su ledu įpilk laimo sultis.','Įpilk romą.','Švelniai užpilk imbieriniu alumi.','Papuošk laimo griežinėliu.']),
-mk('k21','Sidecar','kokteiliai',['baro_irankiai'],5,1,200,0,14,0,
+mk('k21','Sidecar','kokteiliai',['seikeris','kostuvas'],5,1,200,0,14,0,
   [['Konjakas',50,'ml'],['Apelsinų likeris',20,'ml'],['Citrinos sultys',20,'ml']],
   ['Sudėk visus ingredientus su ledu į maišytuvą.','Gerai pakratyk.','Perkošk į šaltą taurę.','Papuošk citrinos žievele.']),
-mk('k22','Manhattan','kokteiliai',['baro_irankiai'],5,1,190,0,8,0,
+mk('k22','Manhattan','kokteiliai',['kostuvas'],5,1,190,0,8,0,
   [['Viskis',50,'ml'],['Raudonasis vermutas',20,'ml'],['Anguostura kartikliai',2,'ml']],
   ['Sudėk visus ingredientus su ledu į maišymo stiklinę.','Švelniai maišyk apie 20 sek.','Perkošk į šaltą taurę.','Papuošk vyšnia.']),
-mk('k23','French 75','kokteiliai',['baro_irankiai'],5,1,170,0,15,0,
+mk('k23','French 75','kokteiliai',['seikeris','kostuvas'],5,1,170,0,15,0,
   [['Džinas',30,'ml'],['Citrinos sultys',15,'ml'],['Cukraus sirupas',10,'ml'],['Putojantis vynas',90,'ml']],
   ['Sudėk džiną, citrinos sultis ir sirupą su ledu į maišytuvą.','Pakratyk ir perkošk į taurę.','Užpilk putojančiu vynu.','Papuošk citrinos žievele.']),
 mk('k24','Tequila Sunrise','kokteiliai',[],5,1,190,0,22,0,
@@ -677,10 +832,10 @@ mk('k25','Bellini','kokteiliai',[],5,1,150,0,17,0,
   ['Į taurę įpilk atšaldytą persikų nektarą.','Lėtai užpilk prosekas.','Švelniai išmaišyk vienu judesiu.','Patiekk iškart, kol putoja.']),
 
 /* ---- NAUJI KOKTEILIAI (2 atnaujinimas) ---- */
-mk('k26','Gin Fizz','kokteiliai',['baro_irankiai'],5,1,150,0,15,0,
+mk('k26','Gin Fizz','kokteiliai',['seikeris','kostuvas'],5,1,150,0,15,0,
   [['Džinas',50,'ml'],['Citrinos sultys',25,'ml'],['Cukraus sirupas',15,'ml'],['Sodos vanduo',60,'ml']],
   ['Sudėk džiną, citrinos sultis ir sirupą su ledu į maišytuvą.','Gerai pakratyk.','Perkošk į taurę su ledu.','Užpilk sodos vandeniu.']),
-mk('k27','Amaretto Sour','kokteiliai',['baro_irankiai'],5,1,200,0,22,0,
+mk('k27','Amaretto Sour','kokteiliai',['seikeris','kostuvas'],5,1,200,0,22,0,
   [['Amaretto likeris',50,'ml'],['Citrinos sultys',25,'ml'],['Cukraus sirupas',10,'ml']],
   ['Sudėk visus ingredientus su ledu į maišytuvą.','Gerai pakratyk.','Perkošk į taurę su ledu.','Papuošk vyšnia.']),
 mk('k28','White Russian','kokteiliai',[],3,1,250,1,18,10,
@@ -695,33 +850,71 @@ mk('k30','Kir Royale','kokteiliai',[],3,1,110,0,10,0,
 mk('k31','Irish Coffee','kokteiliai',[],8,1,220,1,20,10,
   [['Viskis',40,'ml'],['Karšta kava',120,'ml'],['Rudasis cukrus',1,'šauk.'],['Grietinėlė',30,'ml']],
   ['Į šiltą taurę įpilk viskį ir cukrų.','Užpilk karšta kava, išmaišyk.','Lėtai užpilk grietinėlę per šaukšto nugarėlę, kad plauktų viršuje.','Patiekk nemaišytą, karštą.']),
-mk('k32','Old Fashioned','kokteiliai',['baro_irankiai'],5,1,180,0,8,0,
+mk('k32','Old Fashioned','kokteiliai',['grustuve'],5,1,180,0,8,0,
   [['Viskis',50,'ml'],['Cukraus kubelis',1,'vnt'],['Anguostura kartikliai',2,'ml'],['Apelsino žievelė',1,'vnt']],
   ['Sugrūsk cukraus kubelį su kartikliais taurėje.','Įdėk ledo ir įpilk viskį.','Švelniai išmaišyk.','Papuošk apelsino žievele.']),
-mk('k33','Tom Collins','kokteiliai',['baro_irankiai'],5,1,150,0,14,0,
+mk('k33','Tom Collins','kokteiliai',['seikeris','kostuvas'],5,1,150,0,14,0,
   [['Džinas',50,'ml'],['Citrinos sultys',25,'ml'],['Cukraus sirupas',15,'ml'],['Sodos vanduo',90,'ml']],
   ['Sudėk džiną, citrinos sultis ir sirupą su ledu.','Gerai pakratyk arba išmaišyk.','Perpilk į aukštą taurę su ledu.','Užpilk sodos vandeniu.']),
-mk('k34','Bramble','kokteiliai',['baro_irankiai'],5,1,190,0,18,0,
+mk('k34','Bramble','kokteiliai',['seikeris','kostuvas'],5,1,190,0,18,0,
   [['Džinas',50,'ml'],['Citrinos sultys',20,'ml'],['Cukraus sirupas',10,'ml'],['Gervuogių likeris',15,'ml']],
   ['Sudėk džiną, citrinos sultis ir sirupą su ledu, pakratyk.','Perpilk į taurę su smulkintu ledu.','Lėtai užpilk gervuogių likerį per viršų.','Papuošk gervuoge.']),
 mk('k35','Mimosa','kokteiliai',[],3,1,110,0,12,0,
   [['Putojantis vynas',90,'ml'],['Apelsinų sultys',90,'ml']],
   ['Į taurę įpilk atšaldytas apelsinų sultis.','Lėtai užpilk putojančiu vynu.','Švelniai išmaišyk vienu judesiu.','Patiekk iškart.']),
-mk('k36','Rob Roy','kokteiliai',['baro_irankiai'],5,1,170,0,6,0,
+mk('k36','Rob Roy','kokteiliai',['kostuvas'],5,1,170,0,6,0,
   [['Viskis',50,'ml'],['Raudonasis vermutas',20,'ml'],['Anguostura kartikliai',2,'ml']],
   ['Sudėk visus ingredientus su ledu į maišymo stiklinę.','Švelniai maišyk apie 20 sek.','Perkošk į šaltą taurę.','Papuošk vyšnia.']),
 mk('k37','Hugo','kokteiliai',[],5,1,130,0,15,0,
   [['Prosekas',100,'ml'],['Šeivamedžio sirupas',20,'ml'],['Sodos vanduo',30,'ml'],['Švieži mėtos lapeliai',5,'vnt']],
   ['Į taurę su ledu įpilk šeivamedžio sirupą.','Užpilk prosekas ir sodos vandeniu.','Švelniai išmaišyk.','Papuošk mėtos lapeliais.']),
-mk('k38','Gimlet','kokteiliai',['baro_irankiai'],5,1,170,0,12,0,
+mk('k38','Gimlet','kokteiliai',['seikeris','kostuvas'],5,1,170,0,12,0,
   [['Džinas',50,'ml'],['Laimo sultys',20,'ml'],['Cukraus sirupas',10,'ml']],
   ['Sudėk visus ingredientus su ledu į maišytuvą.','Gerai pakratyk.','Perkošk į šaltą taurę.','Papuošk laimo griežinėliu.']),
 mk('k39','Rusty Nail','kokteiliai',[],3,1,180,0,10,0,
   [['Viskis',40,'ml'],['Drambuie likeris',20,'ml']],
   ['Į taurę su ledu įpilk viskį.','Įpilk Drambuie likerį.','Švelniai išmaišyk.','Patiekk atšaldytą.']),
-mk('k40','Kamikaze','kokteiliai',['baro_irankiai'],5,1,180,0,16,0,
+mk('k40','Kamikaze','kokteiliai',['seikeris','kostuvas'],5,1,180,0,16,0,
   [['Vodka',40,'ml'],['Apelsinų likeris',20,'ml'],['Laimo sultys',20,'ml']],
-  ['Sudėk visus ingredientus su ledu į maišytuvą.','Gerai pakratyk.','Perkošk į šaltą taurę.','Papuošk laimo griežinėliu.'])
+  ['Sudėk visus ingredientus su ledu į maišytuvą.','Gerai pakratyk.','Perkošk į šaltą taurę.','Papuošk laimo griežinėliu.']),
+
+/* ---- NAUJI KOKTEILIAI (3 atnaujinimas) ---- */
+mk('k41','Blue Lagoon','kokteiliai',[],3,1,180,0,24,0,
+  [['Vodka',40,'ml'],['Mėlynasis Curaçao',20,'ml'],['Limonadas',120,'ml']],
+  ['Į taurę su ledu įpilk vodką ir Curaçao.','Užpilk limonadu.','Švelniai išmaišyk.','Papuošk citrinos griežinėliu.']),
+mk('k42','Sex on the Beach','kokteiliai',[],5,1,200,0,24,0,
+  [['Vodka',40,'ml'],['Persikų likeris',20,'ml'],['Apelsinų sultys',60,'ml'],['Spanguolių sultys',40,'ml']],
+  ['Į taurę su ledu įpilk vodką ir persikų likerį.','Užpilk apelsinų ir spanguolių sultimis.','Švelniai išmaišyk.','Papuošk apelsino griežinėliu.']),
+mk('k43','Mint Julep','kokteiliai',['grustuve'],5,1,180,0,12,0,
+  [['Burbonas',60,'ml'],['Šviežios mėtos',10,'vnt'],['Cukraus sirupas',15,'ml']],
+  ['Taurėje sugrūsk mėtą su sirupu.','Pripildyk smulkinto ledo.','Įpilk burboną, išmaišyk.','Papuošk mėtos šakele.']),
+mk('k44','Tequila Sunset','kokteiliai',[],3,1,190,0,24,0,
+  [['Tequila',50,'ml'],['Apelsinų sultys',120,'ml'],['Uogų sirupas',10,'ml']],
+  ['Į taurę su ledu įpilk tequila ir apelsinų sultis.','Švelniai išmaišyk.','Įlašink uogų sirupo.','Patiekk nemaišytą.']),
+mk('k45','Aperol Sour','kokteiliai',['seikeris','kostuvas'],5,1,160,0,16,0,
+  [['Aperol',50,'ml'],['Citrinos sultys',25,'ml'],['Cukraus sirupas',10,'ml']],
+  ['Sudėk visus ingredientus su ledu į maišytuvą.','Gerai pakratyk.','Perkošk į taurę su ledu.','Papuošk apelsino griežinėliu.']),
+mk('k46','Gin Basil Smash','kokteiliai',['grustuve','seikeris','kostuvas'],5,1,180,0,14,0,
+  [['Džinas',50,'ml'],['Švieži baziliko lapai',10,'vnt'],['Citrinos sultys',20,'ml'],['Cukraus sirupas',15,'ml']],
+  ['Sugrūsk baziliką maišytuve.','Įpilk džiną, citrinos sultis, sirupą ir ledą.','Gerai pakratyk.','Perkošk į taurę su ledu.']),
+mk('k47','Vodka Cranberry','kokteiliai',[],3,1,160,0,20,0,
+  [['Vodka',50,'ml'],['Spanguolių sultys',120,'ml'],['Laimas',1,'vnt']],
+  ['Į taurę su ledu įpilk vodką.','Užpilk spanguolių sultimis.','Įspausk laimo.','Švelniai išmaišyk.']),
+mk('k48','Godfather','kokteiliai',[],3,1,190,0,8,0,
+  [['Viskis',45,'ml'],['Amaretto likeris',25,'ml']],
+  ['Į taurę su ledu įpilk viskį.','Įpilk Amaretto.','Švelniai išmaišyk.','Patiekk atšaldytą.']),
+mk('k49','Grasshopper','kokteiliai',['seikeris','kostuvas'],5,1,280,2,26,14,
+  [['Mėtų likeris',30,'ml'],['Kakavos likeris',30,'ml'],['Grietinėlė',30,'ml']],
+  ['Sudėk visus ingredientus su ledu į maišytuvą.','Gerai pakratyk.','Perkošk į šaltą taurę.','Papuošk mėtos lapeliu.']),
+mk('k50','Boulevardier','kokteiliai',['kostuvas'],5,1,200,0,10,0,
+  [['Burbonas',45,'ml'],['Campari',30,'ml'],['Raudonasis vermutas',30,'ml']],
+  ['Sudėk visus ingredientus su ledu į maišymo stiklinę.','Maišyk 20 sek.','Perkošk į taurę su ledu.','Papuošk apelsino žievele.']),
+mk('k51','Southside','kokteiliai',['grustuve','seikeris','kostuvas'],5,1,170,0,14,0,
+  [['Džinas',50,'ml'],['Šviežios mėtos',8,'vnt'],['Laimo sultys',20,'ml'],['Cukraus sirupas',15,'ml']],
+  ['Sugrūsk mėtą maišytuve.','Įpilk džiną, laimo sultis, sirupą ir ledą.','Gerai pakratyk.','Perkošk į šaltą taurę.']),
+mk('k52','El Diablo','kokteiliai',[],5,1,200,0,22,0,
+  [['Tequila',50,'ml'],['Juodųjų serbentų likeris',15,'ml'],['Laimo sultys',15,'ml'],['Imbierinis alus',100,'ml']],
+  ['Į taurę su ledu įpilk tequila, likerį ir laimo sultis.','Užpilk imbieriniu alumi.','Švelniai išmaišyk.','Papuošk laimo griežinėliu.'])
 ];
 const COCKTAIL_META = {
   k01:{spirit:'romas',sweetness:'vidutinis',refreshing:true}, k02:{spirit:'romas',sweetness:'saldus',refreshing:true},
@@ -744,13 +937,20 @@ const COCKTAIL_META = {
   k34:{spirit:'dzinas',sweetness:'saldus',refreshing:false}, k35:{spirit:'kita',sweetness:'saldus',refreshing:true},
   k36:{spirit:'viskis',sweetness:'sausas',refreshing:false}, k37:{spirit:'kita',sweetness:'saldus',refreshing:true},
   k38:{spirit:'dzinas',sweetness:'vidutinis',refreshing:false}, k39:{spirit:'viskis',sweetness:'sausas',refreshing:false},
-  k40:{spirit:'degtine',sweetness:'vidutinis',refreshing:false}
+  k40:{spirit:'degtine',sweetness:'vidutinis',refreshing:false},
+  k41:{spirit:'degtine',sweetness:'saldus',refreshing:true}, k42:{spirit:'degtine',sweetness:'saldus',refreshing:true},
+  k43:{spirit:'viskis',sweetness:'vidutinis',refreshing:true}, k44:{spirit:'tequila',sweetness:'saldus',refreshing:true},
+  k45:{spirit:'kita',sweetness:'vidutinis',refreshing:true}, k46:{spirit:'dzinas',sweetness:'vidutinis',refreshing:true},
+  k47:{spirit:'degtine',sweetness:'vidutinis',refreshing:true}, k48:{spirit:'viskis',sweetness:'saldus',refreshing:false},
+  k49:{spirit:'kita',sweetness:'saldus',refreshing:false}, k50:{spirit:'viskis',sweetness:'sausas',refreshing:false},
+  k51:{spirit:'dzinas',sweetness:'vidutinis',refreshing:true}, k52:{spirit:'tequila',sweetness:'vidutinis',refreshing:true}
 };
 COCKTAILS.forEach(c=>{ const m=COCKTAIL_META[c.id]||{spirit:'kita',sweetness:'vidutinis',refreshing:false}; Object.assign(c,m); });
 
 /* ===================== STATE ===================== */
 let equipment = load('vk_equipment', []);
 let barTools = load('vk_barTools', []);
+if(barTools.includes('baro_irankiai')){ barTools = ['seikeris','grustuve','kostuvas']; save('vk_barTools', barTools); }
 let pantry = load('vk_pantry', []);
 let customRecipes = load('vk_customRecipes', []);
 let cookLog = load('vk_cookLog', []);
@@ -765,7 +965,9 @@ let itemFrequency = load('vk_itemFrequency', {});
 let logFrequency = load('vk_logFrequency', {});
 let waterLog = load('vk_waterLog', {});
 let collections = load('vk_collections', []);
-let settings = load('vk_settings', {goalKcal:2000, goalProtein:100, goalCarbs:230, goalFat:65, goalWaterMl:2000, theme:'light', showAlmostReady:true, onboarded:false, noEquipmentConfirmed:false, fontLarge:false, lastBackupReminder:0});
+let shoppingTemplates = load('vk_shoppingTemplates', []);
+let settings = load('vk_settings', {goalKcal:2000, goalProtein:100, goalCarbs:230, goalFat:65, goalWaterMl:2000, theme:'light', showAlmostReady:true, onboarded:false, noEquipmentConfirmed:false, fontSize:'normal', lastBackupReminder:0});
+if(!settings.fontSize) settings.fontSize = settings.fontLarge ? 'large' : 'normal';
 if(settings.showAlmostReady===undefined) settings.showAlmostReady = true;
 if(settings.goalWaterMl===undefined) settings.goalWaterMl = 2000;
 
@@ -791,9 +993,9 @@ function allRecipes(){ return BUILTIN_RECIPES.concat(COCKTAILS).concat(customRec
 /* ===================== INIT ===================== */
 document.addEventListener('DOMContentLoaded', () => {
   document.documentElement.setAttribute('data-theme', settings.theme || 'light');
-  document.body.classList.toggle('text-large', !!settings.fontLarge);
+  applyFontSize();
+  document.getElementById('fontSizeSelect').value = settings.fontSize;
   document.getElementById('themeToggle').checked = settings.theme === 'dark';
-  document.getElementById('fontLargeToggle').checked = !!settings.fontLarge;
   document.getElementById('almostReadyToggle').checked = settings.showAlmostReady !== false;
   document.getElementById('setGoalWater').value = settings.goalWaterMl;
   renderEquipment();
@@ -1121,7 +1323,9 @@ function pantrySuggestionOptions(){
 function topFrequentItems(n){
   return Object.entries(itemFrequency).sort((a,b)=>b[1].count-a[1].count).slice(0,n).map(([name])=>name);
 }
+let pfUnitManuallySet = false;
 function openPantryForm(id, prefill){
+  pfUnitManuallySet = false;
   const editing = id ? pantry.find(p=>p.id===id) : null;
   const pre = prefill || {};
   const cat = (editing && editing.category) || pre.category || PANTRY_CATEGORIES[0];
@@ -1131,13 +1335,13 @@ function openPantryForm(id, prefill){
     ${pre.fromScan ? `<small class="hint" style="margin-bottom:8px">Duomenys užpildyti iš Open Food Facts — patikrinkite prieš išsaugant.</small>` : ''}
     ${quick.length?`<div class="filter-row" style="margin-bottom:2px">${quick.map(n=>`<button class="toggle-chip" onclick="fillFromFrequent('${n.replace(/'/g,"\\'")}')">${n}</button>`).join('')}</div>`:''}
     <label>Pavadinimas</label>
-    <input id="pf_name" list="pantryProductList" value="${editing?editing.name:(pre.name||'')}" placeholder="pvz. Bulvės, arba rinkitės iš sąrašo">
+    <input id="pf_name" list="pantryProductList" value="${editing?editing.name:(pre.name||'')}" placeholder="pvz. Bulvės, arba rinkitės iš sąrašo" oninput="onPantryNameChange()">
     <datalist id="pantryProductList">${pantrySuggestionOptions()}</datalist>
     <label>Kategorija</label>
     <select id="pf_cat" onchange="onPantryCatChange()">${PANTRY_CATEGORIES.map(c=>`<option ${cat===c?'selected':''}>${c}</option>`).join('')}</select>
     <div class="field-row">
       <div><label>Kiekis</label><input id="pf_qty" type="text" inputmode="decimal" placeholder="pvz. 1,5" value="${editing?String(editing.qty).replace('.',','):(pre.qty||'')}"></div>
-      <div><label>Vnt.</label><select id="pf_unit" onchange="refreshLowPresets()">${UNITS.map(u=>`<option ${(editing&&editing.unit===u)||(pre.unit===u)?'selected':''}>${u}</option>`).join('')}</select></div>
+      <div><label>Vnt.</label><select id="pf_unit" onchange="pfUnitManuallySet=true;refreshLowPresets()">${UNITS.map(u=>`<option ${(editing&&editing.unit===u)||(pre.unit===u)?'selected':''}>${u}</option>`).join('')}</select></div>
       <div><label>Min. riba</label>
         <input id="pf_low" type="text" inputmode="decimal" list="pf_low_list" placeholder="pvz. 2" value="${editing&&editing.low!=null?String(editing.low).replace('.',','):''}">
         <datalist id="pf_low_list"></datalist>
@@ -1148,13 +1352,42 @@ function openPantryForm(id, prefill){
       <select id="pf_fresh"><option value="">—</option>${FRESHNESS_OPTIONS.map(f=>`<option ${editing&&editing.freshness===f?'selected':''}>${f}</option>`).join('')}</select>
     </div>
     <label>Vieta</label>
-    <select id="pf_loc"><option value="">—</option>${LOCATIONS.map(l=>`<option ${editing&&editing.location===l?'selected':''}>${l}</option>`).join('')}</select>
+    <select id="pf_loc" onchange="onPantryLocationChange()"><option value="">—</option>${LOCATIONS.map(l=>`<option ${editing&&editing.location===l?'selected':''}>${l}</option>`).join('')}</select>
     <label>Galioja iki (nebūtina)</label>
     <input id="pf_exp" type="date" value="${editing&&editing.expiresOn?editing.expiresOn:''}">
-    <small class="hint">Min. riba — kiekis, kuriam nukritus gausite priminimą. Galima rašyti su kableliu (pvz. 1,5) arba pasirinkti iš sąrašo.</small>
+    <small class="hint" id="pf_exp_hint"></small>
+    <small class="hint">Standartinis vienetas ir galiojimo laikas pasiūlomi automatiškai — galite juos koreguoti.</small>
     <button class="btn btn-primary" style="margin-top:16px" onclick="savePantryItem(${editing?`'${id}'`:'null'})">Išsaugoti</button>
   `);
   refreshLowPresets();
+}
+function onPantryNameChange(){
+  const name = document.getElementById('pf_name').value;
+  if(!name) return;
+  // suggest default unit only if user hasn't manually chosen one
+  const unitEl = document.getElementById('pf_unit');
+  if(!pfUnitManuallySet){
+    const u = defaultUnitFor(name);
+    if(u) { unitEl.value = u; refreshLowPresets(); }
+  }
+  // remember chosen unit from frequency
+  const remembered = itemFrequency[name];
+  if(remembered && remembered.unit && !pfUnitManuallySet){ unitEl.value = remembered.unit; refreshLowPresets(); }
+  maybeSuggestExpiry();
+}
+function onPantryLocationChange(){ maybeSuggestExpiry(); }
+function maybeSuggestExpiry(){
+  const name = document.getElementById('pf_name').value;
+  const loc = document.getElementById('pf_loc').value;
+  const expEl = document.getElementById('pf_exp');
+  const hint = document.getElementById('pf_exp_hint');
+  if(!name || !loc){ if(hint) hint.textContent=''; return; }
+  const suggested = suggestExpiry(name, loc);
+  if(suggested && !expEl.value){
+    expEl.value = suggested;
+    const days = shelfLifeDays(name, loc);
+    if(hint) hint.textContent = `Pasiūlyta pagal tipinį galiojimą (~${days} d. ${loc.toLowerCase()}e). Galite koreguoti.`;
+  }
 }
 function fillFromFrequent(name){
   document.getElementById('pf_name').value = name;
@@ -1163,7 +1396,12 @@ function fillFromFrequent(name){
     if(remembered.category) document.getElementById('pf_cat').value = remembered.category;
     if(remembered.unit) document.getElementById('pf_unit').value = remembered.unit;
     onPantryCatChange();
+  } else {
+    const u = defaultUnitFor(name);
+    if(u) document.getElementById('pf_unit').value = u;
   }
+  refreshLowPresets();
+  maybeSuggestExpiry();
 }
 function onPantryCatChange(){
   const cat = document.getElementById('pf_cat').value;
@@ -1553,6 +1791,7 @@ function renderRecipeDetailBody(r){
       ${!isCocktail?`<button class="btn btn-outline" onclick="openCookMode('${r.id}')">👨‍🍳 Gaminti</button>`:''}
       <button class="btn btn-outline" onclick="openCollectionPicker('${r.id}')">📁 Kolekcija</button>
       <button class="btn btn-outline" onclick="shareRecipe('${r.id}')">📤 Dalintis</button>
+      <button class="btn btn-outline" onclick="exportRecipePDF('${r.id}')">📄 PDF</button>
     </div>
     ${!r.builtin?`<button class="btn btn-danger" style="margin-top:8px" onclick="deleteCustomRecipe('${r.id}')">Trinti receptą</button>`:''}
   `);
@@ -1567,6 +1806,37 @@ async function shareRecipe(id){
     try{ await navigator.clipboard.writeText(text); toast('Nukopijuota į iškarpinę'); }
     catch(e){ toast('Nepavyko pasidalinti'); }
   }
+}
+function exportRecipePDF(id){
+  const r = allRecipes().find(x=>x.id===id);
+  if(!r) return;
+  const N = currentDetailServings || r.servings;
+  const scale = N / r.servings;
+  const win = window.open('', '_blank');
+  if(!win){ toast('Leiskite iškylantiesiems langams, kad sukurtumėte PDF'); return; }
+  const ingHtml = r.ingredients.map(i=>`<li>${i.name} — ${Math.round(i.qty*scale*100)/100} ${i.unit}</li>`).join('');
+  const stepsHtml = r.steps.map(s=>`<li>${s}</li>`).join('');
+  win.document.write(`<!DOCTYPE html><html lang="lt"><head><meta charset="utf-8"><title>${r.name}</title>
+    <style>
+      body{font-family:Georgia,serif;max-width:640px;margin:30px auto;padding:0 20px;color:#2B2620;line-height:1.6}
+      h1{color:#4A7C59;border-bottom:3px solid #E8A33D;padding-bottom:8px}
+      .meta{color:#666;font-size:14px;margin-bottom:20px}
+      h2{color:#4A7C59;margin-top:24px;font-size:18px}
+      ul,ol{padding-left:22px}
+      .nutri{display:flex;gap:16px;margin:16px 0;flex-wrap:wrap}
+      .nutri div{background:#f5f0e8;padding:8px 14px;border-radius:8px;font-size:14px}
+      .foot{margin-top:30px;font-size:12px;color:#999;text-align:center}
+    </style></head><body>
+    <h1>${r.name}</h1>
+    <div class="meta">${N} porcijos · ${r.time} min · ${r.kcal} kcal/porc.</div>
+    <div class="nutri"><div><b>${r.kcal}</b> kcal</div><div><b>${r.protein}g</b> baltymų</div><div><b>${r.carbs}g</b> angliav.</div><div><b>${r.fat}g</b> riebalų</div></div>
+    <h2>Ingredientai</h2><ul>${ingHtml}</ul>
+    <h2>Gaminimas</h2><ol>${stepsHtml}</ol>
+    <div class="foot">Sukurta su „Mano Virtuvė" programėle</div>
+    </body></html>`);
+  win.document.close();
+  setTimeout(()=>{ win.print(); }, 400);
+  toast('Atsidarys spausdinimo langas — pasirinkite „Išsaugoti kaip PDF"');
 }
 
 /* ===================== RECIPE COLLECTIONS ===================== */
@@ -1639,23 +1909,6 @@ function changeDetailServings(delta){
   currentDetailServings = Math.max(1, currentDetailServings + delta);
   const r = allRecipes().find(x=>x.id===currentDetailRecipeId);
   if(r) renderRecipeDetailBody(r);
-}
-function cookRecipe(id){
-  const r = allRecipes().find(x=>x.id===id);
-  if(!r) return;
-  const scale = currentDetailServings / r.servings;
-  r.ingredients.forEach(ing=>{
-    const p = ingredientAvailable(ing.name);
-    if(p && p.unit===ing.unit){ p.qty = Math.max(0, Math.round((p.qty-ing.qty*scale)*100)/100); }
-  });
-  save('vk_pantry', pantry);
-  cookLog.push({id:uid(), date:todayStr(), recipeId:r.id, recipeName:r.name});
-  save('vk_cookLog', cookLog);
-  calorieLog.push({id:uid(), date:todayStr(), name:r.name, kcal:Math.round(r.kcal*scale), protein:Math.round(r.protein*scale), carbs:Math.round(r.carbs*scale), fat:Math.round(r.fat*scale)});
-  save('vk_calorieLog', calorieLog);
-  closeModal();
-  renderPantry(); renderRecipes(); renderLog(); renderStats();
-  toast(r.category==='kokteiliai' ? 'Pažymėta kaip išgerta ir įtraukta į kalorijų žurnalą' : 'Pažymėta kaip pagaminta ir įtraukta į kalorijų žurnalą');
 }
 function deleteCustomRecipe(id){
   const idx = customRecipes.findIndex(r=>r.id===id);
@@ -1811,25 +2064,61 @@ function cookRecipe(id){
   const r = allRecipes().find(x=>x.id===id);
   if(!r) return;
   const madeServings = currentDetailServings || r.servings;
-  // Ask how many portions the user personally ate
+  const isCocktail = r.category==='kokteiliai';
   openModal(`
-    <h2>${r.category==='kokteiliai'?'Kiek išgėrėte?':'Kiek porcijų suvalgėte?'}</h2>
-    <small class="hint">Pagaminta ${madeServings} porc. Iš sandėlio bus nurašytas visas pagamintas kiekis, o į kalorijų žurnalą įrašysime tik tai, kiek suvalgėte jūs.</small>
-    <label style="margin-top:12px">Jūsų suvalgytos porcijos</label>
+    <h2>${isCocktail?'Pažymėti kaip išgertą':'Pagaminta!'}</h2>
+    <small class="hint">Pagaminta ${madeServings} ${isCocktail?'porc.':'porcijų'}. Pasirinkite, kaip įtraukti.</small>
+    <div class="btn-row" style="flex-direction:column;gap:10px;margin-top:14px">
+      <button class="btn btn-primary" onclick="chooseCookMode('${id}',${madeServings},'self')">🍽 Tik sau</button>
+      <button class="btn btn-secondary" onclick="chooseCookMode('${id}',${madeServings},'shared')">👥 Sau ir kitiems</button>
+      <button class="btn btn-outline" onclick="confirmCooked('${id}',${madeServings},'onlycooked')">Tik pagaminau (nevalgiau)</button>
+    </div>
+  `);
+}
+function chooseCookMode(id, madeServings, mode){
+  const r = allRecipes().find(x=>x.id===id);
+  if(!r) return;
+  const isCocktail = r.category==='kokteiliai';
+  if(mode==='self'){
+    // ate all made portions myself (or choose how many)
+    openModal(`
+      <h2>${isCocktail?'Kiek išgėrėte?':'Kiek porcijų suvalgėte?'}</h2>
+      <small class="hint">Iš sandėlio nurašysime tik jūsų suvalgytų porcijų ingredientus.</small>
+      ${portionPickerHtml(madeServings, madeServings)}
+      <button class="btn btn-primary" style="margin-top:18px" onclick="confirmCooked('${id}',${madeServings},'self')">Patvirtinti</button>
+    `);
+    updateEatenKcal(r);
+  } else {
+    // shared: all ingredients removed, but I only log my portions
+    openModal(`
+      <h2>Kiek porcijų suvalgėte jūs?</h2>
+      <small class="hint">Iš sandėlio bus nurašyti visi ${madeServings} porcijų ingredientai (viską suvalgė jūs ir kiti), o į jūsų kalorijas įrašysime tik jūsų suvalgytas porcijas.</small>
+      ${portionPickerHtml(1, madeServings)}
+      <button class="btn btn-primary" style="margin-top:18px" onclick="confirmCooked('${id}',${madeServings},'shared')">Patvirtinti</button>
+    `);
+    updateEatenKcal(r);
+  }
+}
+function portionPickerHtml(defaultVal, maxVal){
+  const presets = [];
+  for(let i=1;i<=Math.max(5,maxVal);i++) presets.push(i);
+  return `<label style="margin-top:12px">Jūsų suvalgytos porcijos</label>
     <div style="display:flex;align-items:center;gap:12px;margin-top:6px">
       <div class="qty-btns">
         <button onclick="adjustEatenPortions(-1)">−</button>
-        <span class="pqty" id="eatenPortions" style="min-width:30px;text-align:center" data-val="1" data-max="${madeServings}">1</span>
+        <span class="pqty" id="eatenPortions" style="min-width:30px;text-align:center" data-val="${defaultVal}" data-max="${maxVal}">${defaultVal}</span>
         <button onclick="adjustEatenPortions(1)">+</button>
       </div>
       <small class="hint" id="eatenKcal" style="margin:0"></small>
     </div>
-    <div class="btn-row" style="margin-top:18px">
-      <button class="btn btn-secondary" onclick="confirmCooked('${id}',${madeServings},true)">Tik pagaminau (nevalgiau)</button>
-      <button class="btn btn-primary" onclick="confirmCooked('${id}',${madeServings},false)">Patvirtinti</button>
-    </div>
-  `);
-  updateEatenKcal(r);
+    <div class="filter-row" style="margin-top:8px">${presets.map(p=>`<button class="toggle-chip" onclick="setEatenPortions(${p})">${p}</button>`).join('')}</div>`;
+}
+function setEatenPortions(v){
+  const el = document.getElementById('eatenPortions');
+  if(!el) return;
+  el.dataset.val = v; el.textContent = v;
+  const r = allRecipes().find(x=>x.id===currentDetailRecipeId);
+  if(r) updateEatenKcal(r);
 }
 function adjustEatenPortions(delta){
   const el = document.getElementById('eatenPortions');
@@ -1843,13 +2132,20 @@ function updateEatenKcal(r){
   const el = document.getElementById('eatenPortions');
   if(!el) return;
   const v = parseInt(el.dataset.val);
-  document.getElementById('eatenKcal').textContent = '≈ '+Math.round(r.kcal*v)+' kcal';
+  const kc = document.getElementById('eatenKcal');
+  if(kc) kc.textContent = '≈ '+Math.round(r.kcal*v)+' kcal';
 }
-function confirmCooked(id, madeServings, onlyCooked){
+function confirmCooked(id, madeServings, mode){
   const r = allRecipes().find(x=>x.id===id);
   if(!r) return;
-  const scale = madeServings / r.servings;
-  // deduct full made amount from pantry
+  const isCocktail = r.category==='kokteiliai';
+  const eaten = mode==='onlycooked' ? 0 : parseInt(document.getElementById('eatenPortions').dataset.val);
+  // Determine how much to deduct from pantry:
+  // - self: deduct only the portions eaten
+  // - shared: deduct all made portions
+  // - onlycooked: deduct all made portions
+  const deductServings = mode==='self' ? eaten : madeServings;
+  const scale = deductServings / r.servings;
   r.ingredients.forEach(ing=>{
     const p = ingredientAvailable(ing.name);
     if(p && p.unit===ing.unit){ p.qty = Math.max(0, Math.round((p.qty-ing.qty*scale)*100)/100); }
@@ -1857,14 +2153,13 @@ function confirmCooked(id, madeServings, onlyCooked){
   save('vk_pantry', pantry);
   cookLog.push({id:uid(), date:todayStr(), recipeId:r.id, recipeName:r.name});
   save('vk_cookLog', cookLog);
-  const eaten = onlyCooked ? 0 : parseInt(document.getElementById('eatenPortions').dataset.val);
   if(eaten>0){
     calorieLog.push({id:uid(), date:todayStr(), name:r.name+(eaten>1?` (${eaten} porc.)`:''), kcal:Math.round(r.kcal*eaten), protein:Math.round(r.protein*eaten), carbs:Math.round(r.carbs*eaten), fat:Math.round(r.fat*eaten)});
     save('vk_calorieLog', calorieLog);
   }
   closeModal();
   renderPantry(); renderRecipes(); renderLog(); renderStats();
-  toast(onlyCooked ? 'Pažymėta kaip pagaminta' : 'Įtraukta į kalorijų žurnalą');
+  toast(mode==='onlycooked' ? 'Pažymėta kaip pagaminta' : (isCocktail?'Įtraukta į žurnalą':'Įtraukta į kalorijų žurnalą'));
 }
 
 /* ===================== CALORIE LOG (with unit-based auto nutrition) ===================== */
@@ -2276,17 +2571,133 @@ function renderShoppingList(){
             <input type="checkbox" ${shoppingChecked.has(m.key)?'checked':''} onchange="toggleShoppingCheck('${m.key}')">
             <span style="${shoppingChecked.has(m.key)?'text-decoration:line-through':''}">${m.name} — ${m.missingQty} ${m.unit}</span>
           </span>
-          ${shoppingChecked.has(m.key)?`<button class="btn btn-sm btn-secondary" onclick="quickAddToPantry('${m.name.replace(/'/g,"\\'")}',${m.missingQty},'${m.unit}')">+ Į sandėlį</button>`:''}
         </li>`).join('')}
       </ul>`).join('')}
+    <button class="btn btn-primary" style="margin-top:12px" onclick="openBoughtDialog()">✅ Apsipirkau</button>
+    <small class="hint" style="margin-top:6px">Pažymėkite pirktus produktus, tada „Apsipirkau" iškart sudės juos į sandėlį su standartiniais kiekiais ir galiojimu.</small>
   </div>`;
+  window._lastShoppingMissing = missing;
 }
 function toggleShoppingCheck(key){ if(shoppingChecked.has(key)) shoppingChecked.delete(key); else shoppingChecked.add(key); renderShoppingList(); }
+function openBoughtDialog(){
+  const missing = window._lastShoppingMissing || [];
+  const checked = missing.filter(m=>shoppingChecked.has(m.key));
+  const items = checked.length ? checked : missing;
+  if(!items.length){ toast('Nėra ką pridėti'); return; }
+  openModal(`
+    <h2>Apsipirkau</h2>
+    <small class="hint">Patikslinkite kiekius ir laikymo vietą — galiojimas pasiūlomas automatiškai. Pažymėti bus sudėti į sandėlį.</small>
+    <div style="max-height:55vh;overflow-y:auto;margin-top:10px">
+    ${items.map((m,i)=>{
+      const unit = defaultUnitFor(m.name);
+      return `<div class="card" style="padding:10px;margin-bottom:8px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <input type="checkbox" id="bought_chk_${i}" checked>
+          <b style="font-size:14px">${m.name}</b>
+        </div>
+        <div class="field-row">
+          <div><input type="text" inputmode="decimal" id="bought_qty_${i}" value="${m.missingQty||1}" placeholder="Kiekis"></div>
+          <div><select id="bought_unit_${i}">${UNITS.map(u=>`<option ${u===(m.unit||unit)?'selected':''}>${u}</option>`).join('')}</select></div>
+          <div><select id="bought_loc_${i}" onchange="updateBoughtExpiry(${i},'${m.name.replace(/'/g,"\\'")}')"><option value="">Vieta</option>${LOCATIONS.map(l=>`<option>${l}</option>`).join('')}</select></div>
+        </div>
+        <input type="date" id="bought_exp_${i}" style="margin-top:6px" placeholder="Galioja iki">
+        <input type="hidden" id="bought_name_${i}" value="${m.name.replace(/"/g,'&quot;')}">
+        <input type="hidden" id="bought_cat_${i}" value="${m.category||'Kita'}">
+      </div>`;
+    }).join('')}
+    </div>
+    <button class="btn btn-primary" style="margin-top:12px" onclick="confirmBought(${items.length})">Sudėti į sandėlį</button>
+  `);
+}
+function updateBoughtExpiry(i, name){
+  const loc = document.getElementById('bought_loc_'+i).value;
+  const expEl = document.getElementById('bought_exp_'+i);
+  if(loc && !expEl.value){
+    const suggested = suggestExpiry(name, loc);
+    if(suggested) expEl.value = suggested;
+  }
+}
+function confirmBought(count){
+  let added = 0;
+  for(let i=0;i<count;i++){
+    const chk = document.getElementById('bought_chk_'+i);
+    if(!chk || !chk.checked) continue;
+    const name = document.getElementById('bought_name_'+i).value;
+    const qty = parseLocaleNumber(document.getElementById('bought_qty_'+i).value) || 1;
+    const unit = document.getElementById('bought_unit_'+i).value;
+    const loc = document.getElementById('bought_loc_'+i).value || null;
+    const exp = document.getElementById('bought_exp_'+i).value || null;
+    const cat = document.getElementById('bought_cat_'+i).value || 'Kita';
+    // merge into existing pantry item of same name+unit, else add new
+    const existing = pantry.find(p=>normName(p.name)===normName(name) && p.unit===unit);
+    if(existing){ existing.qty = Math.round((existing.qty+qty)*100)/100; if(loc) existing.location=loc; if(exp) existing.expiresOn=exp; }
+    else { pantry.push({id:uid(), name, category:cat, qty, unit, low:null, freshness:null, location:loc, expiresOn:exp}); }
+    itemFrequency[name] = {count:((itemFrequency[name]&&itemFrequency[name].count)||0)+1, category:cat, unit};
+    added++;
+  }
+  save('vk_pantry', pantry);
+  save('vk_itemFrequency', itemFrequency);
+  shoppingChecked.clear();
+  closeModal();
+  renderPantry(); renderRecipes(); renderPlan();
+  toast(added+' produktai sudėti į sandėlį');
+}
 function quickAddToPantry(name, qty, unit){
   pantry.push({id:uid(), name, category:'Kita', qty, unit, low:null, freshness:null, location:null, expiresOn:null});
   save('vk_pantry', pantry);
   renderPantry(); renderRecipes();
   toast(name+' pridėta į sandėlį');
+}
+
+/* ===================== SHOPPING TEMPLATES ===================== */
+function openShoppingTemplates(){
+  openModal(`
+    <h2>🛒 Pirkinių šablonai</h2>
+    <small class="hint">Įprasti pirkiniai, kuriuos galite greitai sudėti į sandėlį (pvz. „Savaitės pagrindas").</small>
+    <div style="margin-top:12px">
+    ${shoppingTemplates.length?shoppingTemplates.map(t=>`
+      <div class="recipe-card" style="justify-content:space-between">
+        <div class="rinfo" onclick="applyShoppingTemplate('${t.id}')"><div class="rname" style="font-size:15px">${t.name}</div><div class="rmeta"><span class="tag">${t.items.length} prekės</span></div></div>
+        <button class="icon-btn" onclick="deleteShoppingTemplate('${t.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/></svg></button>
+      </div>`).join('') : '<p class="hint">Šablonų dar nėra.</p>'}
+    </div>
+    <button class="btn btn-outline" style="margin-top:10px" onclick="openNewShoppingTemplate()">+ Naujas šablonas</button>
+  `);
+}
+function openNewShoppingTemplate(){
+  openModal(`
+    <h2>Naujas pirkinių šablonas</h2>
+    <label>Pavadinimas</label>
+    <input id="st_name" placeholder="pvz. Savaitės pagrindas">
+    <label>Prekės (kiekviena naujoje eilutėje)</label>
+    <textarea id="st_items" rows="8" placeholder="Pienas&#10;Kiaušiniai&#10;Duona&#10;Sviestas"></textarea>
+    <small class="hint">Įrašykite po vieną prekę eilutėje. Kiekius ir vienetus galėsite patikslinti sudėdami į sandėlį.</small>
+    <button class="btn btn-primary" style="margin-top:14px" onclick="saveShoppingTemplate()">Išsaugoti</button>
+  `);
+}
+function saveShoppingTemplate(){
+  const name = document.getElementById('st_name').value.trim();
+  const raw = document.getElementById('st_items').value.trim();
+  if(!name || !raw){ toast('Įveskite pavadinimą ir bent vieną prekę'); return; }
+  const items = raw.split('\n').map(s=>s.trim()).filter(Boolean);
+  shoppingTemplates.push({id:uid(), name, items});
+  save('vk_shoppingTemplates', shoppingTemplates);
+  openShoppingTemplates();
+  toast('Šablonas išsaugotas');
+}
+function applyShoppingTemplate(id){
+  const t = shoppingTemplates.find(x=>x.id===id);
+  if(!t) return;
+  const missing = t.items.map(name=>({key:normName(name)+'|'+defaultUnitFor(name), name, unit:defaultUnitFor(name), missingQty:1, category:guessPantryCategory(name)}));
+  window._lastShoppingMissing = missing;
+  shoppingChecked = new Set(missing.map(m=>m.key));
+  closeModal();
+  openBoughtDialog();
+}
+function deleteShoppingTemplate(id){
+  shoppingTemplates = shoppingTemplates.filter(t=>t.id!==id);
+  save('vk_shoppingTemplates', shoppingTemplates);
+  openShoppingTemplates();
 }
 
 /* ===================== STATS ===================== */
@@ -2335,9 +2746,14 @@ function toggleTheme(){
   document.documentElement.setAttribute('data-theme', settings.theme);
   save('vk_settings', settings);
 }
-function toggleFontLarge(){
-  settings.fontLarge = document.getElementById('fontLargeToggle').checked;
-  document.body.classList.toggle('text-large', settings.fontLarge);
+function applyFontSize(){
+  document.body.classList.remove('text-large','text-xlarge');
+  if(settings.fontSize==='large') document.body.classList.add('text-large');
+  else if(settings.fontSize==='xlarge') document.body.classList.add('text-xlarge');
+}
+function setFontSize(){
+  settings.fontSize = document.getElementById('fontSizeSelect').value;
+  applyFontSize();
   save('vk_settings', settings);
 }
 function saveWaterGoal(){
@@ -2419,35 +2835,34 @@ function openHelp(){
   openModal(`
     <h2>Kaip naudotis programėle</h2>
     <div class="section-title" style="margin-top:0">🧺 Sandėlis</div>
-    <p>Čia sekate, kokių produktų turite namuose. Pridėkite produktą mygtuku viršuje arba nuskenuokite brūkšninį kodą. Kiekvienai prekei galite nurodyti kiekį, minimalią ribą (kada priminti, kad baigiasi), šviežumą, laikymo vietą ir galiojimo datą. Kategorijos suskleidžiamos — spauskite pavadinimą, kad atsiskleistų. Viršuje matysite pasiūlymus „Beveik galite pagaminti" ir „Sunaudokite greičiau" (produktams, kurių galiojimas netrukus baigsis).</p>
+    <p>Sekate, kokių produktų turite namuose. Pridėkite produktą mygtuku viršuje arba nuskenuokite brūkšninį kodą (jei kamera neveikia, kodą galima įvesti ranka — produktas surandamas Open Food Facts duomenų bazėje). Įvedant produktą, standartinis vienetas (pvz. pienas — litrai, mėsa — kilogramai) ir galiojimo laikas pagal laikymo vietą pasiūlomi automatiškai — galite koreguoti. Kategorijos suskleidžiamos. Viršuje matysite „Beveik galite pagaminti" ir „Sunaudokite greičiau" pasiūlymus. Produktus galima ištrinti perbraukus pirštu į kairę.</p>
 
     <div class="section-title">📖 Receptai</div>
-    <p>Perjunkite tarp „Maistas" ir „Kokteiliai" viršuje. Paieškos laukelyje galima ieškoti pagal kelis ingredientus vienu metu, atskirtus kableliu (pvz. „vištiena, ryžiai"). Mygtukas „Filtrai" atidaro visus filtrus vienoje vietoje — kategoriją, virtuvės stilių, mitybą (įsk. karnivorą), sudėtingumą; kokteiliams — alkoholio bazę, saldumą, gaivumą. Galite pažymėti mėgstamus (★), įvertinti žvaigždutėmis, palikti pastabą, pridėti į kolekciją ar pasidalinti receptu. Recepto lange keiskite porcijų skaičių — viskas (ingredientai, kalorijos) perskaičiuojama automatiškai. „Gaminimo režimas" rodo žingsnius po vieną su laikmačiais. „Nustebink mane" parenka atsitiktinį receptą pagal jūsų turimą įrangą.</p>
+    <p>Perjunkite tarp „Maistas" ir „Kokteiliai". Paieška veikia pagal kelis ingredientus vienu metu (per kablelį). „Filtrai" — kategorija, virtuvė, mityba (įsk. karnivorą), sudėtingumas; kokteiliams — bazė, saldumas, gaivumas. Galite pažymėti mėgstamus (★), įvertinti, palikti pastabą, pridėti į kolekciją, pasidalinti arba išsaugoti PDF. Keičiant porcijas viskas perskaičiuojama. „Gaminimo režimas" veda per žingsnius su laikmačiais. Pažymint pagamintą, pasirenkate „Tik sau" (nurašomos tik jūsų porcijos) arba „Sau ir kitiems" (nurašomi visi ingredientai, o kalorijos skaičiuojamos tik jūsų porcijoms).</p>
 
     <div class="section-title">🔥 Kalorijos</div>
-    <p>Pridėkite maisto įrašą nurodydami kiekį ir vienetą (vnt, g, ml ir kt.) — kalorijos žinomiems produktams apskaičiuojamos automatiškai. Matote dienos progresą, baltymų/angliavandenių/riebalų balansą, vandens suvartojimą ir savaitės grafiką. Mygtukas „Istorija" leidžia peržiūrėti visų praeities dienų įrašus, sugrupuotus pagal mėnesį.</p>
+    <p>Pridėkite įrašą nurodydami kiekį ir vienetą — kalorijos žinomiems produktams apskaičiuojamos automatiškai. Matote dienos progresą, makro balansą, vandens sekimą ir savaitės grafiką. „📍 Šiandien" grąžina į dabartinę dieną. „Istorija" rodo praeities dienas pagal mėnesį. Įrašus galima trinti perbraukus.</p>
 
     <div class="section-title">📅 Planas</div>
-    <p>Planuokite savaitės valgius kiekvienai dienai. „✨ Užpildyti savaitę" automatiškai parenka įvairius patiekalus, atsižvelgdamas į tai, ką neseniai gaminote. Galite išsaugoti planą kaip šabloną ir vėliau jį pritaikyti kitai savaitei. Pridedant receptą, nurodykite, kiek porcijų gaminsite — pirkinių sąrašas (rodomas automatiškai, sugrupuotas pagal kategorijas) bus tikslesnis.</p>
+    <p>Planuokite savaitės valgius. „Užpildyti savaitę" parenka įvairius patiekalus. Pridedant nurodote porcijų skaičių, kad pirkinių sąrašas (sugrupuotas pagal kategorijas) būtų tikslus. „Apsipirkau" mygtukas iškart sudeda pirktus produktus į sandėlį su standartiniais kiekiais ir galiojimu. Planus ir pirkinių sąrašus galima išsaugoti kaip šablonus.</p>
 
     <div class="section-title">⚙️ Nustatymai</div>
-    <p>Čia pasirenkate virtuvės prietaisus (įsk. baro įrankius kokteiliams), kalorijų/vandens tikslus, temą, šrifto dydį. Galite eksportuoti/importuoti visus duomenis (atsarginė kopija) arba viską ištrinti. Statistika rodo, ką dažniausiai gaminate.</p>
+    <p>Pasirenkate virtuvės prietaisus ir atskirai baro įrankius (šeikeris, grūstuvė, koštuvas). Nustatote kalorijų/vandens tikslus, temą, teksto dydį (trys dydžiai). Galite eksportuoti/importuoti duomenis (atsarginė kopija) arba viską ištrinti. Statistika rodo dažniausiai gaminamus patiekalus.</p>
 
-    <div class="section-title">💡 Bendri patarimai</div>
+    <div class="section-title">💡 Patarimai</div>
     <ul style="padding-left:18px;font-size:14px;line-height:1.6">
-      <li>Ištrynus ką nors per klaidą, apačioje atsiranda „Anuliuoti" mygtukas kelioms sekundėms.</li>
-      <li>Plūduriuojantis apskritas mygtukas apačioje leidžia greitai pridėti bet ką, nepriklausomai nuo skilties.</li>
-      <li>Visi duomenys saugomi tik šiame telefone — pasidarykite atsarginę kopiją Nustatymuose periodiškai.</li>
+      <li>Ištrynus per klaidą — apačioje kelias sekundes rodomas „Anuliuoti" mygtukas.</li>
+      <li>Apvalus + mygtukas apačioje leidžia greitai pridėti bet ką ar įjungti virtuvės laikmatį.</li>
+      <li>Visi duomenys saugomi tik telefone — periodiškai darykite atsarginę kopiją.</li>
     </ul>
   `);
 }
-
 function exportData(){
   const backup = { vk_equipment: equipment, vk_barTools: barTools, vk_pantry: pantry, vk_customRecipes: customRecipes,
     vk_cookLog: cookLog, vk_calorieLog: calorieLog, vk_mealPlan: mealPlan, vk_settings: settings,
     vk_favorites: favorites, vk_ratings: ratings, vk_notes: notes, vk_planTemplates: planTemplates,
     vk_productCache: productCache, vk_itemFrequency: itemFrequency, vk_logFrequency: logFrequency,
-    vk_waterLog: waterLog, vk_collections: collections, exportedAt: new Date().toISOString() };
+    vk_waterLog: waterLog, vk_collections: collections, vk_shoppingTemplates: shoppingTemplates, exportedAt: new Date().toISOString() };
   const blob = new Blob([JSON.stringify(backup, null, 2)], {type:'application/json'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -2462,7 +2877,7 @@ function importData(event){
   reader.onload = e => {
     try{
       const data = JSON.parse(e.target.result);
-      ['vk_equipment','vk_barTools','vk_pantry','vk_customRecipes','vk_cookLog','vk_calorieLog','vk_mealPlan','vk_settings','vk_favorites','vk_ratings','vk_notes','vk_planTemplates','vk_productCache','vk_itemFrequency','vk_logFrequency','vk_waterLog','vk_collections'].forEach(k=>{
+      ['vk_equipment','vk_barTools','vk_pantry','vk_customRecipes','vk_cookLog','vk_calorieLog','vk_mealPlan','vk_settings','vk_favorites','vk_ratings','vk_notes','vk_planTemplates','vk_productCache','vk_itemFrequency','vk_logFrequency','vk_waterLog','vk_collections','vk_shoppingTemplates'].forEach(k=>{
         if(data[k]!==undefined) save(k, data[k]);
       });
       toast('Duomenys atkurti. Perkraunama...');
@@ -2473,6 +2888,6 @@ function importData(event){
 }
 function resetAllData(){
   if(!confirm('Ar tikrai norite ištrinti VISUS duomenis? Šio veiksmo atšaukti negalima.')) return;
-  ['vk_equipment','vk_barTools','vk_pantry','vk_customRecipes','vk_cookLog','vk_calorieLog','vk_mealPlan','vk_settings','vk_favorites','vk_ratings','vk_notes','vk_planTemplates','vk_productCache','vk_itemFrequency','vk_logFrequency','vk_waterLog','vk_collections'].forEach(k=>localStorage.removeItem(k));
+  ['vk_equipment','vk_barTools','vk_pantry','vk_customRecipes','vk_cookLog','vk_calorieLog','vk_mealPlan','vk_settings','vk_favorites','vk_ratings','vk_notes','vk_planTemplates','vk_productCache','vk_itemFrequency','vk_logFrequency','vk_waterLog','vk_collections','vk_shoppingTemplates'].forEach(k=>localStorage.removeItem(k));
   location.reload();
 }
