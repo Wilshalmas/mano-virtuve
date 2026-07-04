@@ -97,8 +97,8 @@ function computeDifficulty(r){
 }
 const SPIRIT_LABELS = {romas:'Romas', degtine:'Degtinė', dzinas:'Džinas', viskis:'Viskis', tequila:'Tequila', konjakas:'Konjakas', kita:'Kita/mišrus'};
 const SWEETNESS_LABELS = {saldus:'Saldus', vidutinis:'Vidutinis', sausas:'Sausas'};
-const PANTRY_CATEGORIES = ['Daržovės','Vaisiai','Mėsa ir žuvis','Pieno produktai','Kiaušiniai','Grūdai, kruopos ir makaronai','Miltai ir dribsniai','Duona ir kepiniai','Ankštiniai','Konservai','Šaldyti produktai','Prieskoniai ir žolelės','Padažai ir aliejus','Kepimo produktai','Saldumynai ir užkandžiai','Sultys','Gėrimai','Alkoholiniai gėrimai','Kita'];
-const FRESHNESS_CATEGORIES = ['Daržovės','Vaisiai','Mėsa ir žuvis'];
+const PANTRY_CATEGORIES = ['Daržovės','Vaisiai','Mėsa','Žuvis ir jūros gėrybės','Pieno produktai','Kiaušiniai','Grūdai, kruopos ir makaronai','Miltai ir dribsniai','Duona ir kepiniai','Ankštiniai','Konservai','Šaldyti produktai','Prieskoniai ir žolelės','Padažai ir aliejus','Kepimo produktai','Saldumynai ir užkandžiai','Sultys','Gėrimai','Alkoholiniai gėrimai','Kita'];
+const FRESHNESS_CATEGORIES = ['Daržovės','Vaisiai','Mėsa','Žuvis ir jūros gėrybės'];
 const FRESHNESS_OPTIONS = ['Šviežia','Konservuota'];
 const LOCATIONS = ['Šaldytuvas','Šaldiklis','Spinta'];
 const UNITS = ['g','kg','ml','l','vnt','šauk.','žiupsnelis'];
@@ -119,6 +119,30 @@ function defaultUnitFor(name){
   const n = normName(name);
   for(const [key,u] of DEFAULT_UNIT_BY_KEYWORD){ if(keyIncludes(n, key)) return u; }
   return 'vnt';
+}
+// Recommended default storage location per product keyword, based on standard food-safety
+// guidance (perishables -> fridge, shelf-stable dry goods -> pantry). Always user-editable.
+const DEFAULT_LOCATION_BY_KEYWORD = [
+  ['bazilik','Šaldytuvas'],['krapai','Šaldytuvas'],['petražol','Šaldytuvas'],['špinat','Šaldytuvas'],
+  ['pienas','Šaldytuvas'],['grietin','Šaldytuvas'],['kefyr','Šaldytuvas'],['jogurt','Šaldytuvas'],['varškė','Šaldytuvas'],['sūris','Šaldytuvas'],['sviest','Šaldytuvas'],
+  ['kiaušin','Šaldytuvas'],
+  ['mėsa','Šaldytuvas'],['jautien','Šaldytuvas'],['kiaulien','Šaldytuvas'],['vištien','Šaldytuvas'],['kalakut','Šaldytuvas'],['antien','Šaldytuvas'],
+  ['žuv','Šaldytuvas'],['lašiš','Šaldytuvas'],['krevet','Šaldytuvas'],['tuno','Šaldytuvas'],['tunas','Šaldytuvas'],
+  ['bekon','Šaldytuvas'],['kumpis','Šaldytuvas'],['dešr','Šaldytuvas'],
+  ['salot','Šaldytuvas'],['agurk','Šaldytuvas'],['brokoli','Šaldytuvas'],['paprika','Šaldytuvas'],['uog','Šaldytuvas'],['cukinij','Šaldytuvas'],
+  ['bulv','Spinta'],['svogūn','Spinta'],['česnak','Spinta'],['moliūg','Spinta'],['morka','Spinta'],['kopūst','Spinta'],
+  ['banan','Spinta'],['obuoli','Spinta'],['citrin','Spinta'],['apelsin','Spinta'],['avokad','Spinta'],['vaisi','Spinta'],['pomidor','Spinta'],
+  ['duon','Spinta'],['batonas','Spinta'],['tortilij','Spinta'],
+  ['miltai','Spinta'],['dribsni','Spinta'],['ryžiai','Spinta'],['grikiai','Spinta'],['makaron','Spinta'],['bulgur','Spinta'],['manų','Spinta'],['kruop','Spinta'],
+  ['lęšiai','Spinta'],['pupel','Spinta'],['avinžirni','Spinta'],['žirniai','Spinta'],['konserv','Spinta'],
+  ['cukr','Spinta'],['druska','Spinta'],['pipir','Spinta'],['aliej','Spinta'],['padaž','Spinta'],['majonez','Spinta'],['garstyč','Spinta'],['medus','Spinta'],['mielės','Spinta'],['kepimo milteliai','Spinta'],['kakav','Spinta'],['šokolad','Spinta'],
+  ['sultys','Šaldytuvas'],['vanduo','Spinta'],['kava','Spinta'],['arbat','Spinta'],
+  ['alus','Spinta'],['vynas','Spinta'],['degtin','Spinta'],['romas','Spinta'],['viskis','Spinta'],['džinas','Spinta'],['tequila','Spinta'],['konjak','Spinta'],
+];
+function defaultLocationFor(name){
+  const n = normName(name);
+  for(const [key,loc] of DEFAULT_LOCATION_BY_KEYWORD){ if(keyIncludes(n, key)) return loc; }
+  return 'Spinta';
 }
 // Shelf life in days, by [keyword, {Šaldytuvas, Šaldiklis, Spinta}]
 const SHELF_LIFE = [
@@ -1315,9 +1339,9 @@ function goToEquipmentSettings(){
 function openPantryShoppingDialog(){
   openModal(`
     <h2>✅ Apsipirkau</h2>
-    <small class="hint">Pažymėkite, ką pirkote, nurodykite kiekį — bus sudėta į sandėlį.</small>
+    <small class="hint">Pažymėkite, ką pirkote. Kiekis, vieta ir galiojimas pasiūlomi automatiškai — galite koreguoti.</small>
     <input type="text" id="boughtSearch" placeholder="Ieškoti produkto..." oninput="renderBoughtCatalog(this.value)" style="margin:10px 0">
-    <div id="boughtCatalogBox" style="max-height:52vh;overflow-y:auto"></div>
+    <div id="boughtCatalogBox" style="max-height:55vh;overflow-y:auto"></div>
     <div class="btn-row" style="margin-top:12px">
       <button class="btn btn-outline" onclick="openPantryForm()">Kito produkto nėra sąraše</button>
       <button class="btn btn-primary" onclick="confirmPantryShopping()">Sudėti į sandėlį</button>
@@ -1332,43 +1356,46 @@ function renderBoughtCatalog(filter){
   Object.entries(SHOPPING_CATALOG).forEach(([cat, items])=>{
     const filtered = f ? items.filter(name=>normName(name).includes(f)) : items;
     if(!filtered.length) return;
-    html += `<div style="font-weight:700;font-size:12.5px;color:var(--muted);margin:12px 0 4px">${cat}</div>`;
+    html += `<div style="font-weight:700;font-size:0.8rem;color:var(--muted);margin:14px 0 6px">${cat}</div>`;
     filtered.forEach(name=>{
       const unit = defaultUnitFor(name);
+      const loc = defaultLocationFor(name);
       const safeName = name.replace(/"/g,'&quot;');
-      html += `<div class="settings-row" style="align-items:center;gap:8px;padding:7px 0">
-        <label style="display:flex;align-items:center;gap:8px;flex:1;cursor:pointer;margin:0">
-          <input type="checkbox" class="bought-chk" data-name="${safeName}" data-unit="${unit}" data-cat="${cat}" onchange="toggleBoughtQty(this)">
-          <span>${name}</span>
-        </label>
-        <input type="text" inputmode="decimal" class="bought-qty" value="1" style="width:56px;display:none;padding:6px 8px">
-        <span class="bought-unit-label" style="width:34px;font-size:12px;color:var(--muted);display:none">${unit}</span>
+      html += `<div class="bought-row" data-name="${safeName}" data-unit="${unit}" data-cat="${cat}">
+        <div class="bought-name">${name}</div>
+        <div class="bought-controls">
+          <input type="checkbox" class="bought-chk" onchange="toggleBoughtQty(this)">
+          <input type="text" inputmode="decimal" class="bought-qty" value="1" style="display:none">
+          <span class="bought-unit-label" style="display:none">${unit}</span>
+          <select class="bought-loc" style="display:none">${LOCATIONS.map(l=>`<option ${l===loc?'selected':''}>${l}</option>`).join('')}</select>
+        </div>
       </div>`;
     });
   });
   box.innerHTML = html || `<p class="hint">Nieko nerasta. Paspauskite „Kito produkto nėra sąraše" žemiau.</p>`;
 }
 function toggleBoughtQty(chk){
-  const row = chk.closest('.settings-row');
-  const qty = row.querySelector('.bought-qty');
-  const unitLbl = row.querySelector('.bought-unit-label');
+  const row = chk.closest('.bought-row');
   const show = chk.checked ? 'inline-block' : 'none';
-  qty.style.display = show;
-  unitLbl.style.display = show;
+  row.querySelector('.bought-qty').style.display = show;
+  row.querySelector('.bought-unit-label').style.display = show;
+  row.querySelector('.bought-loc').style.display = chk.checked ? 'block' : 'none';
 }
 function confirmPantryShopping(){
   const checked = document.querySelectorAll('#boughtCatalogBox .bought-chk:checked');
   if(!checked.length){ toast('Nepažymėjote nė vieno produkto'); return; }
   let added = 0;
   checked.forEach(chk=>{
-    const name = chk.dataset.name;
-    const unit = chk.dataset.unit;
-    const cat = chk.dataset.cat;
-    const row = chk.closest('.settings-row');
+    const row = chk.closest('.bought-row');
+    const name = row.dataset.name;
+    const unit = row.dataset.unit;
+    const cat = row.dataset.cat;
+    const loc = row.querySelector('.bought-loc').value;
     const qty = parseLocaleNumber(row.querySelector('.bought-qty').value) || 1;
+    const expiresOn = suggestExpiry(name, loc);
     const existing = pantry.find(p=>normName(p.name)===normName(name) && p.unit===unit);
-    if(existing){ existing.qty = Math.round((existing.qty+qty)*100)/100; }
-    else { pantry.push({id:uid(), name, category:cat, qty, unit, low:null, freshness:null, location:null, expiresOn:null}); }
+    if(existing){ existing.qty = Math.round((existing.qty+qty)*100)/100; existing.location = loc; if(expiresOn) existing.expiresOn = expiresOn; }
+    else { pantry.push({id:uid(), name, category:cat, qty, unit, low:null, freshness:null, location:loc, expiresOn}); }
     itemFrequency[name] = {count:((itemFrequency[name]&&itemFrequency[name].count)||0)+1, category:cat, unit};
     added++;
   });
@@ -1399,7 +1426,8 @@ function renderUseItUpSoon(){
 const SHOPPING_CATALOG = {
   'Pieno produktai': ['Pienas','Grietinė','Grietinėlė','Jogurtas','Varškė','Kietasis sūris','Fetos sūris','Mocarela','Sviestas','Kefyras'],
   'Kiaušiniai': ['Kiaušiniai'],
-  'Mėsa ir žuvis': ['Vištienos filė','Vištienos šlaunelės','Jautiena','Kiauliena','Bekonas','Kumpis','Dešrelės','Lašiša','Krevetės','Tunas','Kalakutiena'],
+  'Mėsa': ['Vištienos filė','Vištienos šlaunelės','Jautiena','Kiauliena','Bekonas','Kumpis','Dešrelės','Kalakutiena'],
+  'Žuvis ir jūros gėrybės': ['Lašiša','Krevetės','Tunas'],
   'Daržovės': ['Bulvės','Svogūnas','Česnakas','Morka','Pomidoras','Agurkas','Paprika','Cukinija','Kopūstas','Brokoliai','Salotos','Špinatai','Moliūgas'],
   'Vaisiai': ['Bananas','Obuolys','Citrina','Apelsinas','Avokadas','Uogos'],
   'Grūdai, kruopos ir makaronai': ['Ryžiai','Grikiai','Makaronai','Bulgurai'],
@@ -2699,17 +2727,18 @@ function openBoughtDialog(){
     <div style="max-height:55vh;overflow-y:auto;margin-top:10px">
     ${items.map((m,i)=>{
       const unit = defaultUnitFor(m.name);
+      const loc = defaultLocationFor(m.name);
       return `<div class="card" style="padding:10px;margin-bottom:8px">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
           <input type="checkbox" id="bought_chk_${i}" checked>
-          <b style="font-size:14px">${m.name}</b>
+          <b style="font-size:0.875rem">${m.name}</b>
         </div>
         <div class="field-row">
           <div><input type="text" inputmode="decimal" id="bought_qty_${i}" value="${m.missingQty||1}" placeholder="Kiekis"></div>
           <div><select id="bought_unit_${i}">${UNITS.map(u=>`<option ${u===(m.unit||unit)?'selected':''}>${u}</option>`).join('')}</select></div>
-          <div><select id="bought_loc_${i}" onchange="updateBoughtExpiry(${i},'${m.name.replace(/'/g,"\\'")}')"><option value="">Vieta</option>${LOCATIONS.map(l=>`<option>${l}</option>`).join('')}</select></div>
+          <div><select id="bought_loc_${i}" onchange="updateBoughtExpiry(${i},'${m.name.replace(/'/g,"\\'")}')">${LOCATIONS.map(l=>`<option ${l===loc?'selected':''}>${l}</option>`).join('')}</select></div>
         </div>
-        <input type="date" id="bought_exp_${i}" style="margin-top:6px" placeholder="Galioja iki">
+        <input type="date" id="bought_exp_${i}" style="margin-top:6px" value="${suggestExpiry(m.name, loc)||''}" placeholder="Galioja iki">
         <input type="hidden" id="bought_name_${i}" value="${m.name.replace(/"/g,'&quot;')}">
         <input type="hidden" id="bought_cat_${i}" value="${m.category||'Kita'}">
       </div>`;
