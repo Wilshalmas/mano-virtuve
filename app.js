@@ -1310,6 +1310,75 @@ function goToEquipmentSettings(){
   switchView('settings');
   if(!settingsEquipOpen) toggleEquipSection();
 }
+
+/* ===================== PANTRY "APSIPIRKAU" CHECKLIST ===================== */
+function openPantryShoppingDialog(){
+  openModal(`
+    <h2>✅ Apsipirkau</h2>
+    <small class="hint">Pažymėkite, ką pirkote, nurodykite kiekį — bus sudėta į sandėlį.</small>
+    <input type="text" id="boughtSearch" placeholder="Ieškoti produkto..." oninput="renderBoughtCatalog(this.value)" style="margin:10px 0">
+    <div id="boughtCatalogBox" style="max-height:52vh;overflow-y:auto"></div>
+    <div class="btn-row" style="margin-top:12px">
+      <button class="btn btn-outline" onclick="openPantryForm()">Kito produkto nėra sąraše</button>
+      <button class="btn btn-primary" onclick="confirmPantryShopping()">Sudėti į sandėlį</button>
+    </div>
+  `);
+  renderBoughtCatalog('');
+}
+function renderBoughtCatalog(filter){
+  const f = normName(filter||'');
+  const box = document.getElementById('boughtCatalogBox');
+  let html = '';
+  Object.entries(SHOPPING_CATALOG).forEach(([cat, items])=>{
+    const filtered = f ? items.filter(name=>normName(name).includes(f)) : items;
+    if(!filtered.length) return;
+    html += `<div style="font-weight:700;font-size:12.5px;color:var(--muted);margin:12px 0 4px">${cat}</div>`;
+    filtered.forEach(name=>{
+      const unit = defaultUnitFor(name);
+      const safeName = name.replace(/"/g,'&quot;');
+      html += `<div class="settings-row" style="align-items:center;gap:8px;padding:7px 0">
+        <label style="display:flex;align-items:center;gap:8px;flex:1;cursor:pointer;margin:0">
+          <input type="checkbox" class="bought-chk" data-name="${safeName}" data-unit="${unit}" data-cat="${cat}" onchange="toggleBoughtQty(this)">
+          <span>${name}</span>
+        </label>
+        <input type="text" inputmode="decimal" class="bought-qty" value="1" style="width:56px;display:none;padding:6px 8px">
+        <span class="bought-unit-label" style="width:34px;font-size:12px;color:var(--muted);display:none">${unit}</span>
+      </div>`;
+    });
+  });
+  box.innerHTML = html || `<p class="hint">Nieko nerasta. Paspauskite „Kito produkto nėra sąraše" žemiau.</p>`;
+}
+function toggleBoughtQty(chk){
+  const row = chk.closest('.settings-row');
+  const qty = row.querySelector('.bought-qty');
+  const unitLbl = row.querySelector('.bought-unit-label');
+  const show = chk.checked ? 'inline-block' : 'none';
+  qty.style.display = show;
+  unitLbl.style.display = show;
+}
+function confirmPantryShopping(){
+  const checked = document.querySelectorAll('#boughtCatalogBox .bought-chk:checked');
+  if(!checked.length){ toast('Nepažymėjote nė vieno produkto'); return; }
+  let added = 0;
+  checked.forEach(chk=>{
+    const name = chk.dataset.name;
+    const unit = chk.dataset.unit;
+    const cat = chk.dataset.cat;
+    const row = chk.closest('.settings-row');
+    const qty = parseLocaleNumber(row.querySelector('.bought-qty').value) || 1;
+    const existing = pantry.find(p=>normName(p.name)===normName(name) && p.unit===unit);
+    if(existing){ existing.qty = Math.round((existing.qty+qty)*100)/100; }
+    else { pantry.push({id:uid(), name, category:cat, qty, unit, low:null, freshness:null, location:null, expiresOn:null}); }
+    itemFrequency[name] = {count:((itemFrequency[name]&&itemFrequency[name].count)||0)+1, category:cat, unit};
+    added++;
+  });
+  save('vk_pantry', pantry);
+  save('vk_itemFrequency', itemFrequency);
+  closeModal();
+  renderPantry(); renderRecipes();
+  toast(added+' produktai sudėti į sandėlį');
+}
+
 function renderUseItUpSoon(){
   const box = document.getElementById('useItUpBox');
   if(!box) return;
@@ -1327,13 +1396,30 @@ function renderUseItUpSoon(){
     </div>`).join('')}
   </div>`;
 }
-const COMMON_PRODUCTS = [
-  'Pienas','Kiaušiniai','Bulvės','Duona','Sviestas','Varškė','Grietinė','Jogurtas','Kietasis sūris','Fetos sūris',
-  'Vištienos filė','Vištienos šlaunelės','Jautiena','Kiauliena','Bekonas','Kumpis','Lašiša','Krevetės','Tunas',
-  'Ryžiai','Grikiai','Makaronai','Bulgurai','Avižiniai dribsniai','Miltai','Cukrus','Druska','Pipirai','Aliejus',
-  'Alyvuogių aliejus','Česnakas','Svogūnas','Morka','Pomidoras','Agurkas','Paprika','Cukinija','Kopūstas','Brokoliai',
-  'Bananas','Obuolys','Citrina','Avokadas','Uogos','Medus','Sojos padažas','Majonezas','Pomidorų padažas','Kava',
-];
+const SHOPPING_CATALOG = {
+  'Pieno produktai': ['Pienas','Grietinė','Grietinėlė','Jogurtas','Varškė','Kietasis sūris','Fetos sūris','Mocarela','Sviestas','Kefyras'],
+  'Kiaušiniai': ['Kiaušiniai'],
+  'Mėsa ir žuvis': ['Vištienos filė','Vištienos šlaunelės','Jautiena','Kiauliena','Bekonas','Kumpis','Dešrelės','Lašiša','Krevetės','Tunas','Kalakutiena'],
+  'Daržovės': ['Bulvės','Svogūnas','Česnakas','Morka','Pomidoras','Agurkas','Paprika','Cukinija','Kopūstas','Brokoliai','Salotos','Špinatai','Moliūgas'],
+  'Vaisiai': ['Bananas','Obuolys','Citrina','Apelsinas','Avokadas','Uogos'],
+  'Grūdai, kruopos ir makaronai': ['Ryžiai','Grikiai','Makaronai','Bulgurai'],
+  'Miltai ir dribsniai': ['Miltai','Avižiniai dribsniai','Manų kruopos'],
+  'Duona ir kepiniai': ['Duona','Batonas','Tortilijos'],
+  'Ankštiniai': ['Lęšiai','Avinžirniai','Pupelės'],
+  'Konservai': ['Konservuoti pomidorai','Kukurūzai','Žirneliai'],
+  'Prieskoniai ir žolelės': ['Druska','Pipirai','Bazilikas','Krapai'],
+  'Padažai ir aliejus': ['Aliejus','Alyvuogių aliejus','Sojos padažas','Majonezas','Pomidorų padažas','Garstyčios'],
+  'Kepimo produktai': ['Cukrus','Medus','Mielės','Kepimo milteliai'],
+  'Sultys': ['Apelsinų sultys','Obuolių sultys'],
+  'Gėrimai': ['Kava','Arbata','Vanduo'],
+};
+const COMMON_PRODUCTS = Object.values(SHOPPING_CATALOG).flat();
+const PRODUCT_CATEGORY_KEYWORDS = Object.entries(SHOPPING_CATALOG).flatMap(([cat,items])=>items.map(name=>[normName(name),cat]));
+function guessCategoryByKeyword(name){
+  const n = normName(name);
+  for(const [key,cat] of PRODUCT_CATEGORY_KEYWORDS){ if(n.includes(key)||key.includes(n)) return cat; }
+  return 'Kita';
+}
 function pantrySuggestionOptions(){
   const freq = Object.keys(itemFrequency).sort((a,b)=>(itemFrequency[b].count||0)-(itemFrequency[a].count||0));
   const merged = [...new Set(freq.concat(COMMON_PRODUCTS))];
@@ -2184,11 +2270,15 @@ function confirmCooked(id, madeServings, mode){
 /* ===================== CALORIE LOG (with unit-based auto nutrition) ===================== */
 function shiftLogDate(delta){
   const d = new Date(logDate+'T00:00:00'); d.setDate(d.getDate()+delta);
-  logDate = todayStr(d); renderLog();
+  const candidate = todayStr(d);
+  if(candidate > todayStr()){ toast('Tolimesnių dienų dar nėra'); return; }
+  logDate = candidate; renderLog();
 }
 function goToToday(){ logDate = todayStr(); renderLog(); }
 function renderLog(){
   document.getElementById('logDateLabel').textContent = fmtDateLabel(logDate);
+  const nextBtn = document.getElementById('logNextBtn');
+  if(nextBtn){ const atToday = logDate>=todayStr(); nextBtn.disabled = atToday; nextBtn.style.opacity = atToday?'0.35':'1'; }
   const entries = calorieLog.filter(e=>e.date===logDate);
   const totalKcal = entries.reduce((s,e)=>s+e.kcal,0);
   const totalP = entries.reduce((s,e)=>s+(e.protein||0),0);
@@ -2548,7 +2638,7 @@ function guessPantryCategory(name){
     const existing = pantry.find(p=>p.category===cat && (normName(p.name).includes(n)||n.includes(normName(p.name))));
     if(existing) return cat;
   }
-  return 'Kita';
+  return guessCategoryByKeyword(name);
 }
 let shoppingChecked = new Set();
 function renderShoppingList(){
@@ -2766,9 +2856,9 @@ function toggleTheme(){
   save('vk_settings', settings);
 }
 function applyFontSize(){
-  document.body.classList.remove('text-large','text-xlarge');
-  if(settings.fontSize==='large') document.body.classList.add('text-large');
-  else if(settings.fontSize==='xlarge') document.body.classList.add('text-xlarge');
+  document.documentElement.classList.remove('text-large','text-xlarge');
+  if(settings.fontSize==='large') document.documentElement.classList.add('text-large');
+  else if(settings.fontSize==='xlarge') document.documentElement.classList.add('text-xlarge');
 }
 function setFontSize(){
   settings.fontSize = document.getElementById('fontSizeSelect').value;
