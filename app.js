@@ -1012,7 +1012,26 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('setGoalFat').value = settings.goalFat;
   updateBell();
   document.getElementById('bellBtn').addEventListener('click', ()=>{ switchView('pantry'); });
-  if ('serviceWorker' in navigator) { navigator.serviceWorker.register('sw.js').catch(()=>{}); }
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').then(reg => {
+      reg.addEventListener('updatefound', () => {
+        const newSW = reg.installing;
+        if(!newSW) return;
+        newSW.addEventListener('statechange', () => {
+          if(newSW.state==='activated' && navigator.serviceWorker.controller){
+            // a genuinely new version took over (not the first install)
+            if(!sessionStorage.getItem('vk_reloaded_for_update')){
+              sessionStorage.setItem('vk_reloaded_for_update','1');
+              toast('Įkeliama naujausia versija...');
+              setTimeout(()=>location.reload(), 600);
+            }
+          }
+        });
+      });
+      // actively check for a newer sw.js right away, not just on next natural visit
+      reg.update().catch(()=>{});
+    }).catch(()=>{});
+  }
   if(!settings.onboarded){ setTimeout(openOnboarding, 300); }
   else { checkBackupReminder(); }
 });
